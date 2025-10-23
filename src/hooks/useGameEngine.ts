@@ -69,7 +69,7 @@ const makeMonster = (playerLevel: number): CharacterStats => {
 };
 
 /**
- * 공격 계산 로직 (수정됨: 3스택 보너스 공격 추가)
+ * 공격 계산 로직 (수정됨: 0 데미지는 빗나감으로 처리)
  * @returns 배틀로그, 변경된 상태, 전투 종료 여부, 명중 여부
  */
 const calculateAttack = (
@@ -97,24 +97,26 @@ const calculateAttack = (
     newDefender.isDefending = false;
   }
 
-  // 3. 데미지 0 이하
+  // 3. 데미지 0 이하 (수정된 부분)
   if (damage <= 0) {
     damage = 0;
-    const isAttackerPlayer = 'job' in newAttacker;
-    // (플레이어이고, 보너스 공격이 아닐 때) 최소 1 데미지
-    if (isAttackerPlayer && !isGuaranteedHit) { 
-      damage = 1;
-      logs.push({ msg: `🛡 몬스터가 간신히 막았지만 1의 데미지를 입혔다!`, type: 'atk' });
-      didHit = true;
-    } 
-    // (몬스터이거나, 보너스 공격인데 데미지가 0일 때)
-    // 보너스 공격은 아래에서 데미지를 추가할 것이므로 0으로 놔둔다.
-    // 몬스터 공격은 빗나간다.
-    else if (!isAttackerPlayer) { 
-      logs.push({ msg: `😓 공격에 실패했다...`, type: 'fail' });
-      didHit = false;
-      return { logs, attacker: newAttacker, defender: newDefender, isBattleOver, didHit };
+
+    // 보너스 공격(isGuaranteedHit)이 아닐 때만 '실패'로 처리.
+    if (!isGuaranteedHit) { 
+      logs.push({ msg: `😓 ${newAttacker.name}의 공격이 막혔다! (0 데미지)`, type: 'fail' });
+      didHit = false; // '빗나감'으로 처리
+
+      const isAttackerPlayer = 'job' in newAttacker;
+      // 몬스터의 0 데미지 공격은 여기서 턴 종료
+      if (!isAttackerPlayer) {
+        return { logs, attacker: newAttacker, defender: newDefender, isBattleOver, didHit };
+      }
+      // (플레이어의 0 데미지 공격은 턴을 종료하지 않고
+      //  '회피' 판정(5번)으로 넘어감.
+      //  회피 판정에서도 '명중'으로 바뀌지 않으면 최종 didHit = false가 됨)
     }
+    // (보너스 공격(isGuaranteedHit)이면, 데미지가 0이더라도
+    //  6번 로직에서 데미지를 추가할 것이므로 '실패' 처리를 하지 않고 통과)
   }
 
   // 4. 크리티컬
@@ -168,7 +170,7 @@ const calculateAttack = (
 
     // (데미지가 0이었을 경우를 대비해 최소 데미지 보장)
     const minBonusDmg = Math.floor(newAttacker.atk * 0.5); // 공격력 50%
-    damage = Math.max(damage, minBonusDmg); 
+    damage = Math.max(damage, minBonusDmg);
 
     // --- 추가 데미지 (기존 데미지의 50% + 행운) ---
     const bonusDamage = Math.floor(damage * 0.5 + newAttacker.luk);
@@ -179,7 +181,7 @@ const calculateAttack = (
   }
 
   // 7. 최종 데미지 적용
-  if (!didHit && damage > 0) { // (크리티컬X, 회피X, 보너스X, 데미지 1보장)
+  if (!didHit && damage > 0) { // (크리티컬X, 회피X, 보너스X, 0데미지X)
     didHit = true;
   }
 
