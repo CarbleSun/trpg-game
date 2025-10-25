@@ -11,6 +11,7 @@ interface ActionMenuProps {
   onDefend: () => void;
   onRecover: () => void;
   onEscape: () => void;
+	onEnterShop: () => void;
 }
 
 const ActionButton = ({ onClick, disabled, children, hotkey }: {
@@ -47,6 +48,7 @@ const ActionMenu = ({
   onDefend,
   onRecover,
   onEscape,
+	onEnterShop,
 }: ActionMenuProps) => {
   const isBattle = gameState === 'battle';
   const canAct = !isProcessing && (isBattle ? isPlayerTurn : true);
@@ -62,6 +64,9 @@ const ActionMenu = ({
           </ActionButton>
           <ActionButton onClick={onDungeonRecover} disabled={isProcessing} hotkey="R">
             휴식
+          </ActionButton>
+					<ActionButton onClick={onEnterShop} disabled={isProcessing} hotkey="B">
+            상점
           </ActionButton>
         </div>
       )}

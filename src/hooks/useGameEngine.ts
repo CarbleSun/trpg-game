@@ -7,8 +7,10 @@ import type {
   LogMessage,
   LogType,
   BattleResult,
+	EquipmentItem, // 장비 구매 기능 
 } from '../game/types';
 import { ctrl, monsterList } from '../game/constants';
+import { weaponShopList, armorShopList } from '../game/shopItems';
 import { getRandom } from '../game/utils';
 
 // --- 순수 계산 함수 (rpg.js 로직 포팅) ---
@@ -40,8 +42,6 @@ const createNewPlayer = (name: string, job: Job): PlayerStats => {
   const atk = Math.floor((level * levUpVal.atk * mod.atk) * (1 + bonus[0] / 100));
   const def = Math.floor((level * levUpVal.def * mod.def) * (1 + bonus[1] / 100));
   const luk = Math.floor((level * levUpVal.luk * mod.luk) * (1 + bonus[2] / 100));
-  
-  // ( (레벨*HP1) + (레벨*HP2) ) * 직업배율
   const hp = Math.floor(((level * levUpVal.hp[0]) + (level * levUpVal.hp[1])) * mod.hp);
   
   return {
@@ -50,14 +50,16 @@ const createNewPlayer = (name: string, job: Job): PlayerStats => {
     level,
     hp,
     maxHp: hp,
-    atk,
-    def,
-    luk,
+    atk, // 기본 공격력
+    def, // 기본 방어력
+    luk, // 기본 행운
     exp: 0,
     money: 0,
     goalExp: (level * 30) + (level * 120),
     vicCount: 0,
     defCount: 0,
+		weapon: null,
+    armor: null,
   };
 };
 
@@ -278,6 +280,29 @@ export const useGameEngine = () => {
     setLogMessages((prev) => [...prev, ...newLogs]);
   };
 
+	/** 플레이어 유효 스탯 계산기
+   * 플레이어의 기본 스탯과 장비 스탯을 합산하여
+   * 전투에 실제 사용될 '유효 스탯' 객체를 반환합니다.
+   */
+  const getEffectivePlayerStats = (p: PlayerStats): CharacterStats => {
+    const weaponAtk = p.weapon?.value || 0;
+    const armorDef = p.armor?.value || 0;
+    
+    return {
+      // CharacterStats에 필요한 기본 정보 복사
+      name: p.name,
+      level: p.level,
+      hp: p.hp,
+      maxHp: p.maxHp,
+      // 스탯 합산
+      atk: p.atk + weaponAtk,
+      def: p.def + armorDef,
+      luk: p.luk, // (행운 장비는 아직 없음)
+      // 상태 복사
+      isDefending: p.isDefending,
+    };
+  };
+
   /**
    * 몬스터 턴 실행
    */
@@ -288,13 +313,18 @@ export const useGameEngine = () => {
       addLog(`--- 몬스터의 턴 ---`, 'normal');
       
       // 몬스터가 플레이어 공격
-      const result = calculateAttack(currentMonster, currentPlayer);
+			// 몬스터가 '유효 스탯'을 가진 플레이어를 공격
+			const effectivePlayer = getEffectivePlayerStats(currentPlayer);
+      const result = calculateAttack(currentMonster, effectivePlayer);
       addLogs(result.logs);
-      setPlayer(result.defender as PlayerStats); // 몬스터가 공격했으므로 방어자는 플레이어
+
+			// '유효 스탯' 객체에서 변경된 HP를 '실제' 플레이어 state에 반영
+			const updatedPlayer = { ...currentPlayer, hp: result.defender.hp };
+      setPlayer(updatedPlayer); // 몬스터가 공격했으므로 방어자는 플레이어
 
       if (result.isBattleOver) {
         // 플레이어 패배
-        handleBattleEnd('defeat', result.defender as PlayerStats);
+        handleBattleEnd('defeat', updatedPlayer);
       } else {
         // 플레이어 턴으로 전환
         addLog(`--- 플레이어의 턴 ---`, 'normal');
@@ -419,7 +449,9 @@ export const useGameEngine = () => {
     const isBonusAttack = consecutiveMisses >= 3; 
 
     // 2. calculateAttack에 보너스 여부(isBonusAttack) 전달
-    const result = calculateAttack(player, monster, isBonusAttack);
+		// 플레이어의 '유효 스탯'으로 몬스터를 공격
+		const effectivePlayer = getEffectivePlayerStats(player);
+    const result = calculateAttack(effectivePlayer, monster, isBonusAttack);
     addLogs(result.logs);
     setMonster(result.defender);
 
@@ -496,8 +528,10 @@ export const useGameEngine = () => {
     addLog(`🤫 ${player.name}은(는) 도망을 시도한다...`, 'normal');
 
     // 도망 확률 (원본 공식)
+		// '유효 스탯'의 행운으로 도망 확률 계산
+		const effectivePlayer = getEffectivePlayerStats(player);
     let escapeRate = 50;
-    if (player.luk >= monster.luk * 2) {
+    if (effectivePlayer.luk >= monster.luk * 2) {
       escapeRate = 100;
     }
 
@@ -512,6 +546,51 @@ export const useGameEngine = () => {
       }
     }, 1000); // 도망 시도 딜레이
   };
+
+	// 상점 관련 액션
+  const handleEnterShop = () => {
+    addLog(`🛍 상점에 입장했습니다.`, 'normal');
+    setGameState('shop');
+  };
+
+  const handleExitShop = () => {
+    addLog(`🏘️ 마을로 돌아갑니다.`, 'normal');
+    setGameState('dungeon');
+  };
+
+  const handleBuyItem = (item: EquipmentItem) => {
+    if (!player) return;
+
+    // 돈 확인
+    if (player.money < item.price) {
+      addLog(`💰 골드가 부족합니다. (필요: ${item.price} G)`, 'fail');
+      return;
+    }
+    
+    // 이미 장착한 아이템인지 확인 (중복구매 방지)
+    if (item.type === 'weapon' && player.weapon?.id === item.id) {
+      addLog(`🚫 이미 장착중인 무기입니다.`, 'fail');
+      return;
+    }
+    if (item.type === 'armor' && player.armor?.id === item.id) {
+      addLog(`🚫 이미 장착중인 방어구입니다.`, 'fail');
+      return;
+    }
+
+    // 구매 처리
+    setPlayer(prevPlayer => {
+      if (!prevPlayer) return null;
+      return {
+        ...prevPlayer,
+        money: prevPlayer.money - item.price,
+        // 장비 교체
+        weapon: item.type === 'weapon' ? item : prevPlayer.weapon,
+        armor: item.type === 'armor' ? item : prevPlayer.armor,
+      };
+    });
+
+    addLog(`✨ ${item.name}을(를) 구매/장착했습니다!`, 'gainMoney');
+  };
   
   // 키보드 이벤트 핸들러 (단축키)
   const handleKeyDown = (key: string) => {
@@ -520,6 +599,7 @@ export const useGameEngine = () => {
     if (gameState === 'dungeon') {
       if (key === 's') handleNextDungeon();
       if (key === 'r') handleDungeonRecovery();
+			if (key === 'b') handleEnterShop();
     } 
     else if (gameState === 'battle' && isPlayerTurn) {
       if (key === 'a') handleAttack();
@@ -539,6 +619,7 @@ export const useGameEngine = () => {
     isProcessing,
 		recoveryCharges, // UI에 횟수를 표시하기 위해 추가
     consecutiveMisses, // (이전 요청에서 추가됨)
+		shopLists: { weapons: weaponShopList, armors: armorShopList },
     actions: {
       gameStart,
       handleNextDungeon,
@@ -548,6 +629,9 @@ export const useGameEngine = () => {
       handleRecovery,
       handleEscape,
       handleKeyDown,
+			handleEnterShop, // 상점
+      handleExitShop,
+      handleBuyItem,
     },
   };
 };

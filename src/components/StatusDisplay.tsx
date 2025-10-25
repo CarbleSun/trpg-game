@@ -6,6 +6,12 @@ interface StatusDisplayProps {
 }
 
 const StatusDisplay = ({ player }: StatusDisplayProps) => {
+	// 유효 스탯 계산
+  const weaponAtk = player.weapon?.value || 0;
+  const armorDef = player.armor?.value || 0;
+  const totalAtk = player.atk + weaponAtk;
+  const totalDef = player.def + armorDef;
+
   // style.css의 .status, .info, .info-basic 등 변환
   return (
     <div className="mt-10 flex flex-wrap border-b border-gray-300 pb-6 font-stat text-gray-800 md:flex-nowrap">
@@ -35,6 +41,30 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
           <strong className="text-md">HP</strong>
           <div className="mt-1">
              <ProgressBar current={player.hp} max={player.maxHp} colorClass="bg-red-500" />
+          </div>
+        </div>
+      </div>
+
+			{/* 스탯 및 장비 표시 */}
+      <div className="w-full grow p-4 text-sm md:w-auto">
+        <div className="flex">
+          <div className="mr-2 min-w-[30px] text-red-600">ATK</div>
+          <div className="text-gray-700">{totalAtk} ( {player.atk} + <span className="text-red-500">{weaponAtk}</span> )</div>
+        </div>
+        <div className="flex">
+          <div className="mr-2 min-w-[30px] text-blue-600">DEF</div>
+          <div className="text-gray-700">{totalDef} ( {player.def} + <span className="text-blue-500">{armorDef}</span> )</div>
+        </div>
+        <div className="flex">
+          <div className="mr-2 min-w-[30px] text-green-600">LUK</div>
+          <div className="text-gray-700">{player.luk}</div>
+        </div>
+        <div className="mt-2 border-t pt-2">
+          <div className="text-xs text-gray-500">
+            무기: {player.weapon?.name || '없음'}
+          </div>
+          <div className="text-xs text-gray-500">
+            방어: {player.armor?.name || '없음'}
           </div>
         </div>
       </div>

@@ -5,6 +5,7 @@ import StatusDisplay from './components/StatusDisplay';
 import ActionMenu from './components/ActionMenu';
 import Scene from './components/Scene';
 import GameLog from './components/GameLog';
+import ShopScreen from './components/ShopScreen';
 import { useGameEngine } from './hooks/useGameEngine';
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
     isPlayerTurn,
     isProcessing,
 		recoveryCharges, // 회복 횟수
+		shopLists, // 상점 목록
     actions,
   } = useGameEngine();
 
@@ -59,6 +61,7 @@ function App() {
           onDefend={actions.handleDefend}
           onRecover={actions.handleRecovery}
           onEscape={actions.handleEscape}
+					onEnterShop={actions.handleEnterShop}
         />
         
         {/* 씬 (VS) */}
@@ -71,6 +74,16 @@ function App() {
         {/* 게임 로그 */}
         <GameLog messages={logMessages} />
       </main>
+
+			{/* 상점 모달 조건부 렌더링 (화면 위에 겹침) */}
+      {gameState === 'shop' && (
+        <ShopScreen
+          player={player}
+          shopLists={shopLists}
+          onExitShop={actions.handleExitShop}
+          onBuyItem={actions.handleBuyItem}
+        />
+      )}
     </div>
   );
 }

@@ -20,6 +20,10 @@
 - 도적 : 방어력 감소, 운 증가
 - 마법사 : 공격력 대폭 증가, 운 감소
 
+상점 시스템 추가
+- 이제 상점에서 장비를 구매할 수 있습니다!
+- 장비는 추후 계속해서 업데이트 할 예정입니다.
+
 
 ## 🔧 개발 도구
 - 메인 라이브러리 : React
@@ -35,10 +39,10 @@
 2️⃣ 마우스나 키보드 버튼을 사용하여 게임을 진행하세요! <br>
 
 ## 🖥 게임 화면
-<img width="1919" height="944" alt="Image" src="https://github.com/user-attachments/assets/b50ad0a2-ba2f-4bd9-9adc-d2620888920f" />
+<img width="1919" height="945" alt="Image" src="https://github.com/user-attachments/assets/74e46f99-3f22-4e27-b007-01e1e3476051" />
 
 
-<img width="1919" height="943" alt="Image" src="https://github.com/user-attachments/assets/baf8f06d-2f6e-4a3b-b083-bbeeea56636a" />
+<img width="1919" height="944" alt="Image" src="https://github.com/user-attachments/assets/208680ee-098f-4abc-ae01-f4d9eb07c05a" />
 
 
-<img width="1919" height="944" alt="Image" src="https://github.com/user-attachments/assets/08da019a-c2b0-495c-8b06-d76d068649f1" />
+<img width="1919" height="944" alt="Image" src="https://github.com/user-attachments/assets/bd9d86b2-2ab6-4fd6-83d3-6c5acfcce8ea" />
