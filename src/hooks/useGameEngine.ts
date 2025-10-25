@@ -14,18 +14,35 @@ import { getRandom } from '../game/utils';
 // --- 순수 계산 함수 (rpg.js 로직 포팅) ---
 
 /**
- * 신규 플레이어 스탯을 생성합니다.
+ * 각 직업별 기본 스탯 편차 (배율)
+ * [HP, ATK, DEF, LUK]
+ */
+const jobStatModifiers = {
+  // 마법사: HP/DEF 낮음, ATK 높음
+  "마법사": { hp: 0.8, atk: 1.2, def: 0.7, luk: 1.0 },
+  // 전사: HP/DEF 높음, ATK/LUK 낮음
+  "전사": { hp: 1.3, atk: 0.8, def: 1.2, luk: 0.7 },
+  // 도적: LUK 높음, DEF 약간 낮음
+  "도적": { hp: 1.0, atk: 1.0, def: 0.9, luk: 1.3 },
+};
+
+/**
+ * 신규 플레이어 스탯을 생성합니다. (편차 적용 수정됨)
  */
 const createNewPlayer = (name: string, job: Job): PlayerStats => {
   const level = 1;
   const { levUpVal, jobBonus } = ctrl;
 
-  const bonus = jobBonus[job]; // [atk, def, luk]
+  const bonus = jobBonus[job]; // [atk, def, luk] % 보너스
+  const mod = jobStatModifiers[job]; // [hp, atk, def, luk] 기본 배율
 
-  const atk = Math.floor((level * levUpVal.atk) * (1 + bonus[0] / 100));
-  const def = Math.floor((level * levUpVal.def) * (1 + bonus[1] / 100));
-  const luk = Math.floor((level * levUpVal.luk) * (1 + bonus[2] / 100));
-  const hp = (level * levUpVal.hp[0]) + (level * levUpVal.hp[1]);
+  // (레벨 * 기본스탯 * 직업배율) * (1 + %보너스)
+  const atk = Math.floor((level * levUpVal.atk * mod.atk) * (1 + bonus[0] / 100));
+  const def = Math.floor((level * levUpVal.def * mod.def) * (1 + bonus[1] / 100));
+  const luk = Math.floor((level * levUpVal.luk * mod.luk) * (1 + bonus[2] / 100));
+  
+  // ( (레벨*HP1) + (레벨*HP2) ) * 직업배율
+  const hp = Math.floor(((level * levUpVal.hp[0]) + (level * levUpVal.hp[1])) * mod.hp);
   
   return {
     name,
@@ -200,7 +217,7 @@ const calculateAttack = (
 };
 
 /**
- * 레벨업 처리 (rpg.js의 levelUp 메서드 포팅)
+ * 레벨업 처리 (편차 적용 수정됨)
  */
 const checkLevelUp = (player: PlayerStats): { newPlayer: PlayerStats, logs: Omit<LogMessage, 'id'>[] } => {
   let newPlayer = { ...player };
@@ -215,13 +232,15 @@ const checkLevelUp = (player: PlayerStats): { newPlayer: PlayerStats, logs: Omit
   logs.push({ msg: `🆙 레벨 업! 레벨 ${newPlayer.level}이(가) 되었다.`, type: 'lvup' });
 
   const { levUpVal, jobBonus } = ctrl;
-  const bonus = jobBonus[newPlayer.job]; // [atk, def, luk]
+  const bonus = jobBonus[newPlayer.job]; // [atk, def, luk] % 보너스
+  const mod = jobStatModifiers[newPlayer.job]; // [hp, atk, def, luk] 기본 배율
 
-  // 스탯 재계산
-  newPlayer.atk = Math.floor((newPlayer.level * levUpVal.atk) * (1 + bonus[0] / 100));
-  newPlayer.def = Math.floor((newPlayer.level * levUpVal.def) * (1 + bonus[1] / 100));
-  newPlayer.luk = Math.floor((newPlayer.level * levUpVal.luk) * (1 + bonus[2] / 100));
-  newPlayer.hp = (newPlayer.level * levUpVal.hp[0]) + (newPlayer.level * levUpVal.hp[1]);
+  // 스탯 재계산 (createNewPlayer와 동일한 공식 적용)
+  newPlayer.atk = Math.floor((newPlayer.level * levUpVal.atk * mod.atk) * (1 + bonus[0] / 100));
+  newPlayer.def = Math.floor((newPlayer.level * levUpVal.def * mod.def) * (1 + bonus[1] / 100));
+  newPlayer.luk = Math.floor((newPlayer.level * levUpVal.luk * mod.luk) * (1 + bonus[2] / 100));
+  
+  newPlayer.hp = Math.floor(((newPlayer.level * levUpVal.hp[0]) + (newPlayer.level * levUpVal.hp[1])) * mod.hp);
   newPlayer.maxHp = newPlayer.hp; // HP 전체 회복
   
   newPlayer.exp = 0; // 경험치 초기화 (원본에서는 0으로 설정됨)
@@ -229,7 +248,6 @@ const checkLevelUp = (player: PlayerStats): { newPlayer: PlayerStats, logs: Omit
 
   return { newPlayer, logs };
 };
-
 
 // --- 메인 커스텀 훅 ---
 
@@ -241,6 +259,7 @@ export const useGameEngine = () => {
   const [isPlayerTurn, setIsPlayerTurn] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false); // 몬스터 턴 등 처리 중 플래그
 	const [consecutiveMisses, setConsecutiveMisses] = useState(0); // 연속 빗나감 횟수
+	const [recoveryCharges, setRecoveryCharges] = useState(5); // 회복 횟수 추가
 
   /**
    * 로그 추가 유틸리티
@@ -294,6 +313,7 @@ export const useGameEngine = () => {
     targetMonster?: CharacterStats,
   ) => {
 		setConsecutiveMisses(0); // 전투 종료 시 빗나감 카운터 초기화
+		setRecoveryCharges(5); // 전투 종료 시 회복 횟수 초기화
     let playerAfterBattle = { ...updatedPlayer };
     const logs: Omit<LogMessage, 'id'>[] = [];
 
@@ -356,6 +376,8 @@ export const useGameEngine = () => {
       setMonster(newMonster);
       setGameState('battle');
       addLog(`👻 ${newMonster.name}이(가) 나타났다...!`, 'appear');
+
+			setRecoveryCharges(5); // 전투 시작 시 회복 횟수 초기화
 
       // 선공 결정 (원본)
       if (getRandom(1, 100) <= 50) {
@@ -435,17 +457,29 @@ export const useGameEngine = () => {
   const handleRecovery = () => {
     if (isProcessing || !isPlayerTurn || !player || !monster) return;
 
+    // 횟수 체크
+    if (recoveryCharges <= 0) {
+      addLog(`🚫 회복 횟수를 모두 사용했다! (남은 횟수: 0)`, 'fail');
+      // 턴을 종료하지 않고 다른 행동을 선택하게 함
+      return; 
+    }
+
     setIsPlayerTurn(false); // 턴 종료
     
-    let newHp = player.hp + Math.floor(player.maxHp * 0.4); // 40% 회복
+    // 회복량 60%로 상향
+    let newHp = player.hp + Math.floor(player.maxHp * 0.6); 
     if (newHp > player.maxHp) {
       newHp = player.maxHp;
     }
 
     if (player.hp === newHp) {
       addLog(`😊 이미 체력이 가득 찼다. (HP: ${newHp})`, 'normal');
+      // 턴은 낭비했지만, 횟수는 차감하지 않음
     } else {
-      addLog(`😊 체력을 회복했다. (HP: ${newHp})`, 'normal');
+      // 횟수 차감 및 로그
+      const newCharges = recoveryCharges - 1;
+      setRecoveryCharges(newCharges); // 횟수 차감
+      addLog(`😊 체력을 회복했다. (HP: ${newHp}, 남은 횟수: ${newCharges})`, 'normal');
     }
     
     const recoveredPlayer = { ...player, hp: newHp };
@@ -503,6 +537,8 @@ export const useGameEngine = () => {
     gameState,
     isPlayerTurn,
     isProcessing,
+		recoveryCharges, // UI에 횟수를 표시하기 위해 추가
+    consecutiveMisses, // (이전 요청에서 추가됨)
     actions: {
       gameStart,
       handleNextDungeon,

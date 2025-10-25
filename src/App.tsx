@@ -15,6 +15,7 @@ function App() {
     gameState,
     isPlayerTurn,
     isProcessing,
+		recoveryCharges, // 회복 횟수
     actions,
   } = useGameEngine();
 
@@ -51,6 +52,7 @@ function App() {
           gameState={gameState}
           isPlayerTurn={isPlayerTurn}
           isProcessing={isProcessing}
+					recoveryCharges={recoveryCharges} // <-- 2. ActionMenu로 전달
           onDungeonNext={actions.handleNextDungeon}
           onDungeonRecover={actions.handleDungeonRecovery}
           onAttack={actions.handleAttack}

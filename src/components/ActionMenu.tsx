@@ -4,6 +4,7 @@ interface ActionMenuProps {
   gameState: GameState;
   isPlayerTurn: boolean;
   isProcessing: boolean;
+	recoveryCharges: number; // <-- 1. prop 타입 추가
   onDungeonNext: () => void;
   onDungeonRecover: () => void;
   onAttack: () => void;
@@ -39,6 +40,7 @@ const ActionMenu = ({
   gameState,
   isPlayerTurn,
   isProcessing,
+	recoveryCharges, // <-- 2. prop 받기
   onDungeonNext,
   onDungeonRecover,
   onAttack,
@@ -74,7 +76,7 @@ const ActionMenu = ({
             방어
           </ActionButton>
           <ActionButton onClick={onRecover} disabled={!canAct} hotkey="E">
-            회복
+            회복 ({recoveryCharges})
           </ActionButton>
           <ActionButton onClick={onEscape} disabled={!canAct} hotkey="Q">
             도망
