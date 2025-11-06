@@ -6,6 +6,7 @@ import ActionMenu from './components/ActionMenu';
 import Scene from './components/Scene';
 import GameLog from './components/GameLog';
 import ShopScreen from './components/ShopScreen';
+import SkillsScreen from './components/SkillsScreen';
 import { useGameEngine } from './hooks/useGameEngine';
 
 function App() {
@@ -18,6 +19,8 @@ function App() {
     isProcessing,
 		recoveryCharges, // 회복 횟수
 		shopLists, // 상점 목록
+    skills,
+    isSkillsOpen,
     actions,
   } = useGameEngine();
 
@@ -48,6 +51,8 @@ function App() {
       <main className="mx-auto w-full max-w-5xl px-5 pb-10 md:px-8">
         {/* 스탯 표시 */}
         <StatusDisplay player={player} />
+
+        {/* 학습은 별도 스킬 모달에서 진행 */}
         
         {/* 액션 메뉴 */}
         <ActionMenu
@@ -55,13 +60,18 @@ function App() {
           isPlayerTurn={isPlayerTurn}
           isProcessing={isProcessing}
 					recoveryCharges={recoveryCharges} // <-- 2. ActionMenu로 전달
+          learnedSkills={player.skills}
+          skillCooldowns={player.skillCooldowns}
+          skills={skills}
           onDungeonNext={actions.handleNextDungeon}
           onDungeonRecover={actions.handleDungeonRecovery}
           onAttack={actions.handleAttack}
           onDefend={actions.handleDefend}
           onRecover={actions.handleRecovery}
           onEscape={actions.handleEscape}
-					onEnterShop={actions.handleEnterShop}
+				onEnterShop={actions.handleEnterShop}
+          onOpenSkills={actions.handleOpenSkills}
+          onUseSkill={actions.handleUseSkill}
         />
         
         {/* 씬 (VS) */}
@@ -82,6 +92,19 @@ function App() {
           shopLists={shopLists}
           onExitShop={actions.handleExitShop}
           onBuyItem={actions.handleBuyItem}
+        />
+      )}
+
+      {/* 스킬 모달 */}
+      {isSkillsOpen && (
+        <SkillsScreen
+          player={player}
+          skills={skills}
+          onClose={actions.handleCloseSkills}
+          onLearn={actions.learnSkill}
+          onUse={actions.handleUseSkill}
+          gameState={gameState}
+          isPlayerTurn={isPlayerTurn && gameState === 'battle'}
         />
       )}
     </div>

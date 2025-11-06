@@ -42,6 +42,63 @@ export interface PlayerStats extends CharacterStats {
   defCount: number;
   weapon: EquipmentItem | null; // 무기
   armor: EquipmentItem | null; // 방어구
+  // 스킬 시스템
+  skillPoints: number; // 보유 스킬 포인트
+  skills: SkillKey[]; // 습득한 스킬 키 목록
+  activeBuffs?: Array<{
+    key: SkillKey;
+    remainingTurns: number;
+    bonuses: { atk?: number; def?: number; luk?: number };
+    evadeAll?: boolean;
+    reflectPercent?: number;
+    barrier?: boolean;
+    chargeAttackMultiplier?: number;
+    counterDamage?: number;
+    lifeStealPercent?: number;
+    weakenPercent?: number;
+    multiStrikeNext?: boolean;
+    trueStrikeNext?: boolean;
+  }>; // 임시 버프
+  skillCooldowns?: Partial<Record<SkillKey, number>>; // 남은 쿨다운 턴
+  monsterStunnedTurns?: number;
+}
+
+// 스킬 키 및 스킬 타입 (전부 액티브)
+export type SkillKey =
+  | 'shadowVeil'
+  | 'phantomStrike'
+  | 'bladeFlurry'
+  | 'vampiricAura'
+  | 'hex'
+  | 'shadowBind'
+  | 'timeStop'
+  | 'arcaneBarrier';
+
+export interface Skill {
+  key: SkillKey;
+  name: string; // 표시명
+  requiredLevel: number; // 배울 수 있는 최소 레벨
+  description: string;
+  kind: 'attack' | 'buff';
+  cooldown: number; // 재사용 대기 (플레이어 턴 기준)
+  // kind === 'buff'
+  duration?: number; // 지속 턴 수 (플레이어 턴 기준)
+  bonuses?: { atk?: number; def?: number; luk?: number };
+  // kind === 'attack'
+  attackBonusMultiplier?: number; // 추가 데미지 배율 (예: 0.5 => +50%)
+  guaranteedCrit?: boolean; // 크리티컬 보장
+  effect?:
+    | { type: 'evade'; value: number }
+    | { type: 'reflect'; value: number }
+    | { type: 'barrier'; value: number }
+    | { type: 'charge'; value: number }
+    | { type: 'timeStop'; value: number }
+    | { type: 'counter'; value: number }
+    | { type: 'lifesteal'; value: number }
+    | { type: 'weaken'; value: number }
+    | { type: 'multiStrike'; value: number }
+    | { type: 'trueStrike'; value: number }
+    | { type: 'stun'; value: number };
 }
 
 // 몬스터 리스트 타입

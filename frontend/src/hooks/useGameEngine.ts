@@ -9,7 +9,7 @@ import type {
   BattleResult,
 	EquipmentItem, // 장비 구매 기능 
 } from '../game/types';
-import { ctrl, monsterList } from '../game/constants';
+import { ctrl, monsterList, skills as allSkills } from '../game/constants';
 import { weaponShopList, armorShopList } from '../game/shopItems';
 import { getRandom } from '../game/utils';
 
@@ -60,6 +60,8 @@ const createNewPlayer = (name: string, job: Job): PlayerStats => {
     defCount: 0,
 		weapon: null,
     armor: null,
+    skillPoints: 0,
+    skills: [],
   };
 };
 
@@ -232,6 +234,9 @@ const checkLevelUp = (player: PlayerStats): { newPlayer: PlayerStats, logs: Omit
   // 레벨 업!
   newPlayer.level += 1;
   logs.push({ msg: `🆙 레벨 업! 레벨 ${newPlayer.level}이(가) 되었다.`, type: 'lvup' });
+  // 스킬 포인트 +1
+  newPlayer.skillPoints = (newPlayer.skillPoints || 0) + 1;
+  logs.push({ msg: `✨ 스킬 포인트 +1 (보유: ${newPlayer.skillPoints})`, type: 'lvup' });
 
   const { levUpVal, jobBonus } = ctrl;
   const bonus = jobBonus[newPlayer.job]; // [atk, def, luk] % 보너스
@@ -262,6 +267,7 @@ export const useGameEngine = () => {
   const [isProcessing, setIsProcessing] = useState(false); // 몬스터 턴 등 처리 중 플래그
 	const [consecutiveMisses, setConsecutiveMisses] = useState(0); // 연속 빗나감 횟수
 	const [recoveryCharges, setRecoveryCharges] = useState(5); // 회복 횟수 추가
+  const [isSkillsOpen, setIsSkillsOpen] = useState(false); // 스킬 창 모달
 
   /**
    * 로그 추가 유틸리티
@@ -287,20 +293,51 @@ export const useGameEngine = () => {
   const getEffectivePlayerStats = (p: PlayerStats): CharacterStats => {
     const weaponAtk = p.weapon?.value || 0;
     const armorDef = p.armor?.value || 0;
-    
+
+    // 활성 버프 합산
+    const buffs = (p.activeBuffs || []).reduce((acc, b) => {
+      acc.atk += b.bonuses.atk || 0;
+      acc.def += b.bonuses.def || 0;
+      acc.luk += b.bonuses.luk || 0;
+      return acc;
+    }, { atk: 0, def: 0, luk: 0 });
+
     return {
-      // CharacterStats에 필요한 기본 정보 복사
       name: p.name,
       level: p.level,
       hp: p.hp,
       maxHp: p.maxHp,
-      // 스탯 합산
-      atk: p.atk + weaponAtk,
-      def: p.def + armorDef,
-      luk: p.luk, // (행운 장비는 아직 없음)
-      // 상태 복사
+      atk: p.atk + weaponAtk + buffs.atk,
+      def: p.def + armorDef + buffs.def,
+      luk: p.luk + buffs.luk,
       isDefending: p.isDefending,
     };
+  };
+
+  // 스킬 관련: 배울 수 있는지 검사 및 배우기
+  const canLearnSkill = (p: PlayerStats, key: typeof allSkills[number]['key']): boolean => {
+    const skill = allSkills.find(s => s.key === key);
+    if (!skill) return false;
+    if (p.skills.includes(key)) return false;
+    if (p.level < skill.requiredLevel) return false;
+    if ((p.skillPoints || 0) <= 0) return false;
+    return true;
+  };
+
+  const learnSkill = (key: typeof allSkills[number]['key']) => {
+    if (!player) return;
+    if (!canLearnSkill(player, key)) {
+      addLog('🚫 스킬을 배울 수 없습니다.', 'fail');
+      return;
+    }
+    const skill = allSkills.find(s => s.key === key)!;
+    const updated = {
+      ...player,
+      skillPoints: player.skillPoints - 1,
+      skills: [...player.skills, key],
+    };
+    setPlayer(updated);
+    addLog(`📘 "${skill.name}" 스킬을 습득했다!`, 'normal');
   };
 
   /**
@@ -311,16 +348,79 @@ export const useGameEngine = () => {
     
     setTimeout(() => {
       addLog(`--- 몬스터의 턴 ---`, 'normal');
+
+      // 몬스터 기절 체크
+      if ((currentPlayer.monsterStunnedTurns || 0) > 0) {
+        addLog(`💫 적이 기절하여 행동할 수 없다!`, 'fail');
+        const nextPlayer = { ...currentPlayer, monsterStunnedTurns: (currentPlayer.monsterStunnedTurns || 0) - 1 };
+        // 플레이어 턴으로 전환
+        addLog(`--- 플레이어의 턴 ---`, 'normal');
+        const ticked = tickSkills(nextPlayer);
+        setPlayer(ticked);
+        setIsPlayerTurn(true);
+        setIsProcessing(false);
+        return;
+      }
       
+      // 특수 방어 버프 처리 (배리어/완회)
+      const barrierIdx = (currentPlayer.activeBuffs || []).findIndex(b => b.barrier);
+      if (barrierIdx >= 0) {
+        addLog(`🛡 배리어가 적의 공격을 완전히 막았다!`, 'normal');
+        const nextBuffs = [...(currentPlayer.activeBuffs || [])];
+        nextBuffs.splice(barrierIdx, 1); // 1회성 소모
+        const updatedAfterBarrier = { ...currentPlayer, activeBuffs: nextBuffs };
+        setPlayer(updatedAfterBarrier);
+        addLog(`--- 플레이어의 턴 ---`, 'normal');
+        const ticked = tickSkills(updatedAfterBarrier);
+        setPlayer(ticked);
+        setIsPlayerTurn(true);
+        setIsProcessing(false);
+        return;
+      }
+
+      const hasEvade = (currentPlayer.activeBuffs || []).some(b => b.evadeAll);
+      if (hasEvade) {
+        addLog(`🍃 그림자처럼 공격을 모두 회피했다!`, 'fail');
+        addLog(`--- 플레이어의 턴 ---`, 'normal');
+        const ticked = tickSkills(currentPlayer);
+        setPlayer(ticked);
+        setIsPlayerTurn(true);
+        setIsProcessing(false);
+        return;
+      }
+
+      // 약화(weaken) 적용
+      const weaken = (currentPlayer.activeBuffs || []).find(b => (b.weakenPercent || 0) > 0)?.weakenPercent || 0;
+      const attackerForTurn = weaken > 0 ? { ...currentMonster, atk: Math.max(1, Math.floor(currentMonster.atk * (1 - weaken))) } : currentMonster;
+
       // 몬스터가 플레이어 공격
 			// 몬스터가 '유효 스탯'을 가진 플레이어를 공격
 			const effectivePlayer = getEffectivePlayerStats(currentPlayer);
-      const result = calculateAttack(currentMonster, effectivePlayer);
+      const result = calculateAttack(attackerForTurn, effectivePlayer);
       addLogs(result.logs);
 
 			// '유효 스탯' 객체에서 변경된 HP를 '실제' 플레이어 state에 반영
-			const updatedPlayer = { ...currentPlayer, hp: result.defender.hp };
+			let updatedPlayer = { ...currentPlayer, hp: result.defender.hp };
       setPlayer(updatedPlayer); // 몬스터가 공격했으므로 방어자는 플레이어
+
+      // 반사/카운터 처리
+      const reflect = (currentPlayer.activeBuffs || []).find(b => (b.reflectPercent || 0) > 0)?.reflectPercent || 0;
+      const counter = (currentPlayer.activeBuffs || []).find(b => (b.counterDamage || 0) > 0)?.counterDamage || 0;
+      let updatedMonster = { ...currentMonster };
+      // 마지막 로그에서 데미지 파싱 (없으면 0)
+      const last = result.logs[result.logs.length - 1];
+      const match = last?.msg.match(/(\d+)의 데미지를/);
+      const dealt = match ? parseInt(match[1], 10) : 0;
+      if (reflect > 0 && dealt > 0) {
+        const reflectDmg = Math.max(1, Math.floor(dealt * reflect));
+        updatedMonster.hp = Math.max(0, updatedMonster.hp - reflectDmg);
+        addLog(`🔁 가시 갑옷 반사! ${reflectDmg} 피해 (적 HP: ${updatedMonster.hp})`, 'atk');
+      }
+      if (counter > 0 && dealt > 0) {
+        updatedMonster.hp = Math.max(0, updatedMonster.hp - counter);
+        addLog(`🔪 반격 성공! ${counter} 피해 (적 HP: ${updatedMonster.hp})`, 'atk');
+      }
+      setMonster(updatedMonster);
 
       if (result.isBattleOver) {
         // 플레이어 패배
@@ -328,6 +428,9 @@ export const useGameEngine = () => {
       } else {
         // 플레이어 턴으로 전환
         addLog(`--- 플레이어의 턴 ---`, 'normal');
+        // 턴 시작 시 스킬 지속/쿨다운 감소
+        const ticked = tickSkills(updatedPlayer);
+        setPlayer(ticked);
         setIsPlayerTurn(true);
         setIsProcessing(false);
       }
@@ -412,6 +515,9 @@ export const useGameEngine = () => {
       // 선공 결정 (원본)
       if (getRandom(1, 100) <= 50) {
         addLog(`😁 선빵필승! ${player.name}은(는) 먼저 공격할 수 있다.`);
+        // 턴 시작 시 스킬 지속/쿨다운 감소
+        const ticked = tickSkills(player);
+        setPlayer(ticked);
         setIsPlayerTurn(true);
         setIsProcessing(false);
       } else {
@@ -451,7 +557,29 @@ export const useGameEngine = () => {
     // 2. calculateAttack에 보너스 여부(isBonusAttack) 전달
 		// 플레이어의 '유효 스탯'으로 몬스터를 공격
 		const effectivePlayer = getEffectivePlayerStats(player);
-    const result = calculateAttack(effectivePlayer, monster, isBonusAttack);
+    // 차지 버프 적용 (다음 공격 강화)
+    const chargeIdx = (player.activeBuffs || []).findIndex(b => (b.chargeAttackMultiplier || 0) > 0);
+    let chargedStats = effectivePlayer;
+    if (chargeIdx >= 0) {
+      const mult = (player.activeBuffs || [])[chargeIdx].chargeAttackMultiplier || 0;
+      chargedStats = { ...chargedStats, atk: Math.floor(chargedStats.atk * (1 + mult)) };
+      // 일회성 소비
+      const nextBuffs = [...(player.activeBuffs || [])];
+      nextBuffs.splice(chargeIdx, 1);
+      setPlayer({ ...player, activeBuffs: nextBuffs });
+      addLog(`⚡️ 차지 에너지가 방출된다! (+${Math.floor(mult * 100)}% ATK)`, 'cri');
+    }
+    // true strike: 방어 무시
+    const trueIdx = (player.activeBuffs || []).findIndex(b => b.trueStrikeNext);
+    let defenderStats = monster;
+    if (trueIdx >= 0) {
+      defenderStats = { ...monster, def: 0 };
+      const nextBuffs = [...(player.activeBuffs || [])];
+      nextBuffs.splice(trueIdx, 1);
+      setPlayer({ ...player, activeBuffs: nextBuffs });
+      addLog(`🎯 방어를 꿰뚫는 일격!`, 'cri');
+    }
+    let result = calculateAttack(chargedStats, defenderStats, isBonusAttack);
     addLogs(result.logs);
     setMonster(result.defender);
 
@@ -462,6 +590,44 @@ export const useGameEngine = () => {
       setConsecutiveMisses((prev) => prev + 1); // 빗나감! 카운터 증가
       if (consecutiveMisses + 1 === 3) { // 방금 3스택이 되었다면
          addLog(`😡 오마에와 모 신데이루. 너는 내가 죽인다!`, 'cri');
+      }
+    }
+
+    // 라이프스틸 적용
+    const ls = (player.activeBuffs || []).find(b => (b.lifeStealPercent || 0) > 0)?.lifeStealPercent || 0;
+    if (ls > 0) {
+      const last = result.logs[result.logs.length - 1];
+      const match = last?.msg.match(/(\d+)의 데미지를/);
+      const dealt = match ? parseInt(match[1], 10) : 0;
+      if (dealt > 0) {
+        const heal = Math.max(1, Math.floor(dealt * ls));
+        const healed = Math.min(player.maxHp, player.hp + heal);
+        setPlayer(prev => prev ? { ...prev, hp: healed } : prev);
+        addLog(`🩸 흡혈 효과! HP +${heal} (현재 ${Math.min(player.maxHp, player.hp + heal)})`, 'normal');
+      }
+    }
+
+    // 멀티 스트라이크
+    const msIdx = (player.activeBuffs || []).findIndex(b => b.multiStrikeNext);
+    if (msIdx >= 0 && !result.isBattleOver) {
+      const nextBuffs = [...(player.activeBuffs || [])];
+      nextBuffs.splice(msIdx, 1);
+      setPlayer(prev => prev ? { ...prev, activeBuffs: nextBuffs } : prev);
+      addLog(`🔪 연속 타격!`, 'atk');
+      const secondAttacker = { ...chargedStats, atk: Math.floor(chargedStats.atk * 0.6) };
+      result = calculateAttack(secondAttacker, result.defender, false);
+      addLogs(result.logs);
+      setMonster(result.defender);
+      // 라이프스틸 2타 적용
+      if (ls > 0) {
+        const last2 = result.logs[result.logs.length - 1];
+        const m2 = last2?.msg.match(/(\d+)의 데미지를/);
+        const dealt2 = m2 ? parseInt(m2[1], 10) : 0;
+        if (dealt2 > 0) {
+          const heal2 = Math.max(1, Math.floor(dealt2 * ls));
+          setPlayer(prev => prev ? { ...prev, hp: Math.min(prev.maxHp, prev.hp + heal2) } : prev);
+          addLog(`🩸 흡혈 효과! HP +${heal2}`, 'normal');
+        }
       }
     }
 
@@ -520,6 +686,102 @@ export const useGameEngine = () => {
     // 몬스터 턴 진행
     runMonsterTurn(recoveredPlayer, monster);
   };
+
+  // 스킬 지속/쿨다운 틱 (플레이어 턴 시작 시)
+  const tickSkills = (p: PlayerStats): PlayerStats => {
+    const nextBuffs = (p.activeBuffs || [])
+      .map(b => ({ ...b, remainingTurns: b.remainingTurns - 1 }))
+      .filter(b => b.remainingTurns > 0);
+    const nextCooldowns: NonNullable<PlayerStats['skillCooldowns']> = { ...(p.skillCooldowns || {}) };
+    Object.keys(nextCooldowns).forEach(k => {
+      const key = k as keyof typeof nextCooldowns;
+      if (typeof nextCooldowns[key] === 'number' && (nextCooldowns[key] as number) > 0) {
+        nextCooldowns[key] = Math.max(0, (nextCooldowns[key] as number) - 1);
+      }
+    });
+    return { ...p, activeBuffs: nextBuffs, skillCooldowns: nextCooldowns };
+  };
+
+  // 전투 중 스킬 사용
+  const handleUseSkill = (key: typeof allSkills[number]['key']) => {
+    if (isProcessing || !isPlayerTurn || !player || !monster) return;
+    if (!player.skills.includes(key)) {
+      addLog('🚫 습득하지 않은 스킬입니다.', 'fail');
+      return;
+    }
+    const skill = allSkills.find(s => s.key === key);
+    if (!skill) return;
+    const cd = player.skillCooldowns?.[key] || 0;
+    if (cd > 0) {
+      addLog(`⏳ 스킬 쿨다운: ${cd}턴 남음`, 'fail');
+      return;
+    }
+
+    setIsPlayerTurn(false); // 행동 소모
+
+    if (skill.kind === 'buff') {
+      const duration = skill.duration || 1;
+      const bonuses = skill.bonuses || {};
+      const extra: any = {};
+      if (skill.effect?.type === 'evade') extra.evadeAll = true;
+      if (skill.effect?.type === 'reflect') extra.reflectPercent = skill.effect.value;
+      if (skill.effect?.type === 'barrier') extra.barrier = true;
+      if (skill.effect?.type === 'charge') extra.chargeAttackMultiplier = skill.effect.value;
+      if (skill.effect?.type === 'counter') extra.counterDamage = skill.effect.value;
+      if (skill.effect?.type === 'lifesteal') extra.lifeStealPercent = skill.effect.value;
+      if (skill.effect?.type === 'weaken') extra.weakenPercent = skill.effect.value;
+      if (skill.effect?.type === 'multiStrike') extra.multiStrikeNext = true;
+      if (skill.effect?.type === 'trueStrike') extra.trueStrikeNext = true;
+      const updatedPlayer: PlayerStats = {
+        ...player,
+        activeBuffs: [ ...(player.activeBuffs || []), { key, remainingTurns: duration, bonuses, ...extra } ],
+        skillCooldowns: { ...(player.skillCooldowns || {}), [key]: skill.cooldown },
+      };
+      setPlayer(updatedPlayer);
+      addLog(`🛡 스킬 사용: ${skill.name} (지속 ${duration}턴)`, 'normal');
+      // 몬스터 턴 진행
+      runMonsterTurn(updatedPlayer, monster);
+      return;
+    }
+    if (skill.effect?.type === 'timeStop') {
+      // 추가 턴 획득: 행동 소모하되 턴 유지
+      setPlayer({ ...player, skillCooldowns: { ...(player.skillCooldowns || {}), [key]: skill.cooldown } });
+      addLog(`⏳ 시간 정지! 추가 턴을 얻었다.`, 'cri');
+      setIsPlayerTurn(true);
+      setIsProcessing(false);
+      return;
+    }
+
+    if (skill.effect?.type === 'stun') {
+      const turns = Math.max(1, Math.floor(skill.effect.value));
+      const updated = { ...player, monsterStunnedTurns: (player.monsterStunnedTurns || 0) + turns };
+      setPlayer({ ...updated, skillCooldowns: { ...(player.skillCooldowns || {}), [key]: skill.cooldown } });
+      addLog(`🌀 적이 ${turns}턴 동안 기절했다!`, 'cri');
+      // 스턴은 사용으로 행동 소모되고, 다음 몬스터 턴에 적용되어 스킵됨
+      runMonsterTurn(updated, monster);
+      return;
+    }
+
+    // 공격형 액티브: 강화된 공격 1회 수행
+    const effectivePlayer = getEffectivePlayerStats(player);
+    // 기본 공격 계산
+    const result = calculateAttack(
+      { ...effectivePlayer, atk: Math.floor(effectivePlayer.atk * (1 + (skill.attackBonusMultiplier || 0))) },
+      monster,
+      !!skill.guaranteedCrit,
+    );
+    addLogs([{ msg: `🔥 스킬 사용: ${skill.name}`, type: 'cri' }, ...result.logs]);
+    setMonster(result.defender);
+
+    // 쿨다운 부여
+    setPlayer(prev => prev ? { ...prev, skillCooldowns: { ...(prev.skillCooldowns || {}), [key]: skill.cooldown } } : prev);
+
+    if (result.isBattleOver) {
+      handleBattleEnd('victory', { ...player }, result.defender);
+    } else {
+      runMonsterTurn({ ...player }, result.defender);
+    }
+  };
   
   const handleEscape = () => {
     if (isProcessing || !isPlayerTurn || !player || !monster) return;
@@ -556,6 +818,23 @@ export const useGameEngine = () => {
   const handleExitShop = () => {
     addLog(`🏘️ 마을로 돌아갑니다.`, 'normal');
     setGameState('dungeon');
+  };
+
+  // 스킬 창 (모달)
+  const handleOpenSkills = () => {
+    if (isProcessing) return;
+    // 전투 중에는 스킬 배우기 창 접근 불가
+    if (gameState === 'battle') {
+      addLog(`🚫 전투 중에는 스킬을 배울 수 없습니다.`, 'fail');
+      return;
+    }
+    addLog(`📘 스킬 수련장을 연다.`, 'normal');
+    setIsSkillsOpen(true);
+  };
+
+  const handleCloseSkills = () => {
+    addLog(`📕 스킬 수련장을 닫았다.`, 'normal');
+    setIsSkillsOpen(false);
   };
 
   const handleBuyItem = (item: EquipmentItem) => {
@@ -600,12 +879,20 @@ export const useGameEngine = () => {
       if (key === 's') handleNextDungeon();
       if (key === 'r') handleDungeonRecovery();
 			if (key === 'b') handleEnterShop();
+      if (key === 'k') {
+        if (isSkillsOpen) handleCloseSkills(); else handleOpenSkills();
+      }
     } 
     else if (gameState === 'battle' && isPlayerTurn) {
       if (key === 'a') handleAttack();
       if (key === 'd') handleDefend();
       if (key === 'e') handleRecovery();
       if (key === 'q') handleEscape();
+      // 전투 중에는 스킬 배우기 창 접근 불가
+    }
+    // 모달 공통 단축키
+    if (isSkillsOpen && (key === 'k' || key === 'q')) {
+      handleCloseSkills();
     }
   };
 
@@ -620,6 +907,8 @@ export const useGameEngine = () => {
 		recoveryCharges, // UI에 횟수를 표시하기 위해 추가
     consecutiveMisses, // (이전 요청에서 추가됨)
 		shopLists: { weapons: weaponShopList, armors: armorShopList },
+    skills: allSkills,
+    isSkillsOpen,
     actions: {
       gameStart,
       handleNextDungeon,
@@ -632,6 +921,10 @@ export const useGameEngine = () => {
 			handleEnterShop, // 상점
       handleExitShop,
       handleBuyItem,
+      handleOpenSkills,
+      handleCloseSkills,
+      handleUseSkill,
+      learnSkill,
     },
   };
 };

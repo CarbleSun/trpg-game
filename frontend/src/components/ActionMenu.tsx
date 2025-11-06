@@ -1,10 +1,13 @@
-import type { GameState } from '../game/types';
+import type { GameState, SkillKey, Skill } from '../game/types';
 
 interface ActionMenuProps {
   gameState: GameState;
   isPlayerTurn: boolean;
   isProcessing: boolean;
 	recoveryCharges: number; // <-- 1. prop 타입 추가
+  learnedSkills?: SkillKey[];
+  skillCooldowns?: Partial<Record<SkillKey, number>>;
+  skills?: Skill[];
   onDungeonNext: () => void;
   onDungeonRecover: () => void;
   onAttack: () => void;
@@ -12,6 +15,8 @@ interface ActionMenuProps {
   onRecover: () => void;
   onEscape: () => void;
 	onEnterShop: () => void;
+  onOpenSkills: () => void;
+  onUseSkill: (key: SkillKey) => void;
 }
 
 const ActionButton = ({ onClick, disabled, children, hotkey }: {
@@ -49,9 +54,15 @@ const ActionMenu = ({
   onRecover,
   onEscape,
 	onEnterShop,
+  onOpenSkills,
+  learnedSkills = [],
+  skillCooldowns = {},
+  skills = [],
+  onUseSkill,
 }: ActionMenuProps) => {
   const isBattle = gameState === 'battle';
   const canAct = !isProcessing && (isBattle ? isPlayerTurn : true);
+  const nameOf = (key: SkillKey) => skills.find(s => s.key === key)?.name || key;
 
   // style.css의 .menuPosition
   return (
@@ -68,12 +79,15 @@ const ActionMenu = ({
 					<ActionButton onClick={onEnterShop} disabled={isProcessing} hotkey="B">
             상점
           </ActionButton>
+          <ActionButton onClick={onOpenSkills} disabled={isProcessing} hotkey="K">
+            스킬
+          </ActionButton>
         </div>
       )}
 
       {/* 전투 메뉴 */}
       {gameState === 'battle' && (
-        <div className="flex justify-center">
+        <div className="flex flex-wrap justify-center">
           <ActionButton onClick={onAttack} disabled={!canAct} hotkey="A">
             공격
           </ActionButton>
@@ -86,6 +100,21 @@ const ActionMenu = ({
           <ActionButton onClick={onEscape} disabled={!canAct} hotkey="Q">
             도망
           </ActionButton>
+          {/* 배운 스킬 버튼들 */}
+          {learnedSkills.map((key) => {
+            const cd = (skillCooldowns as Record<SkillKey, number | undefined>)[key] || 0;
+            const disabled = !canAct || cd > 0;
+            return (
+              <ActionButton
+                key={key}
+                onClick={() => onUseSkill(key)}
+                disabled={disabled}
+                hotkey={cd > 0 ? `${cd}` : ''}
+              >
+                {nameOf(key)}
+              </ActionButton>
+            );
+          })}
         </div>
       )}
     </div>
