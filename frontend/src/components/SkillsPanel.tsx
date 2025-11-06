@@ -15,8 +15,9 @@ const SkillsPanel = ({ player, skills, onLearn }: SkillsPanelProps) => {
     return true;
   };
 
-  // 레벨별 그룹화
-  const grouped = skills.reduce<Record<number, Skill[]>>((acc, s) => {
+  // 직업 필터 및 레벨별 그룹화
+  const eligibleByJob = skills.filter(s => !s.allowedJobs || s.allowedJobs.includes(player.job));
+  const grouped = eligibleByJob.reduce<Record<number, Skill[]>>((acc, s) => {
     if (!acc[s.requiredLevel]) acc[s.requiredLevel] = [];
     acc[s.requiredLevel].push(s);
     return acc;

@@ -72,13 +72,28 @@ export type SkillKey =
   | 'hex'
   | 'shadowBind'
   | 'timeStop'
-  | 'arcaneBarrier';
+  | 'arcaneBarrier'
+  | 'warSmash'
+  | 'battleCryWar'
+  | 'frostNova'
+  | 'arcaneSurge'
+  | 'manaShield'
+  | 'drainingCurse'
+  | 'ironWill'
+  | 'berserkRush'
+  | 'cleave'
+  | 'crushingRoar'
+  | 'smokeBomb'
+  | 'assassinatePrep'
+  | 'flurry'
+  | 'nerveStrike';
 
 export interface Skill {
   key: SkillKey;
   name: string; // 표시명
   requiredLevel: number; // 배울 수 있는 최소 레벨
   description: string;
+  allowedJobs?: Job[]; // 배울 수 있는 직업 제한 (없으면 전직업)
   kind: 'attack' | 'buff';
   cooldown: number; // 재사용 대기 (플레이어 턴 기준)
   // kind === 'buff'

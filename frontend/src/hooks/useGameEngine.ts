@@ -320,6 +320,7 @@ export const useGameEngine = () => {
     if (!skill) return false;
     if (p.skills.includes(key)) return false;
     if (p.level < skill.requiredLevel) return false;
+    if (skill.allowedJobs && !skill.allowedJobs.includes(p.job)) return false;
     if ((p.skillPoints || 0) <= 0) return false;
     return true;
   };
