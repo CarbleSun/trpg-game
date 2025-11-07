@@ -7,6 +7,7 @@ import Scene from './components/Scene';
 import GameLog from './components/GameLog';
 import ShopScreen from './components/ShopScreen';
 import SkillsScreen from './components/SkillsScreen';
+import DungeonSelectionScreen from './components/DungeonSelectionScreen';
 import { useGameEngine } from './hooks/useGameEngine';
 
 function App() {
@@ -21,6 +22,8 @@ function App() {
 		shopLists, // 상점 목록
     skills,
     isSkillsOpen,
+    showBattleChoice,
+    dungeons,
     actions,
   } = useGameEngine();
 
@@ -42,7 +45,26 @@ function App() {
     return <SetupScreen onGameStart={actions.gameStart} />;
   }
 
-  // 2. 메인 게임 화면
+  // 2. 던전 선택 화면
+  if (gameState === 'dungeonSelect') {
+    return (
+      <div className="flex min-h-screen flex-col bg-gray-50">
+        <Header />
+        <main className="mx-auto w-full max-w-5xl px-5 pb-10 md:px-8">
+          <StatusDisplay player={player} />
+          <GameLog messages={logMessages} />
+        </main>
+        <DungeonSelectionScreen
+          player={player}
+          dungeons={dungeons}
+          onSelectDungeon={actions.handleSelectDungeon}
+          onExit={actions.handleCloseDungeonSelect}
+        />
+      </div>
+    );
+  }
+
+  // 3. 메인 게임 화면
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
       <Header />
@@ -72,6 +94,10 @@ function App() {
 				onEnterShop={actions.handleEnterShop}
           onOpenSkills={actions.handleOpenSkills}
           onUseSkill={actions.handleUseSkill}
+          onOpenDungeonSelect={actions.handleOpenDungeonSelect}
+          showBattleChoice={showBattleChoice}
+          onContinueBattle={actions.handleContinueBattle}
+          onExitDungeon={actions.handleExitDungeon}
         />
         
         {/* 씬 (VS) */}
@@ -102,11 +128,9 @@ function App() {
           skills={skills}
           onClose={actions.handleCloseSkills}
           onLearn={actions.learnSkill}
-          onUse={actions.handleUseSkill}
-          gameState={gameState}
-          isPlayerTurn={isPlayerTurn && gameState === 'battle'}
         />
       )}
+
     </div>
   );
 }

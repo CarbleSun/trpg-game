@@ -8,15 +8,19 @@ interface ActionMenuProps {
   learnedSkills?: SkillKey[];
   skillCooldowns?: Partial<Record<SkillKey, number>>;
   skills?: Skill[];
+  showBattleChoice?: boolean;
   onDungeonNext: () => void;
   onDungeonRecover: () => void;
   onAttack: () => void;
   onDefend: () => void;
   onRecover: () => void;
   onEscape: () => void;
-	onEnterShop: () => void;
+  onEnterShop: () => void;
   onOpenSkills: () => void;
   onUseSkill: (key: SkillKey) => void;
+  onOpenDungeonSelect: () => void;
+  onContinueBattle: () => void;
+  onExitDungeon: () => void;
 }
 
 const ActionButton = ({ onClick, disabled, children, hotkey }: {
@@ -53,12 +57,16 @@ const ActionMenu = ({
   onDefend,
   onRecover,
   onEscape,
-	onEnterShop,
+  onEnterShop,
   onOpenSkills,
   learnedSkills = [],
   skillCooldowns = {},
   skills = [],
   onUseSkill,
+  onOpenDungeonSelect,
+  showBattleChoice = false,
+  onContinueBattle,
+  onExitDungeon,
 }: ActionMenuProps) => {
   const isBattle = gameState === 'battle';
   const canAct = !isProcessing && (isBattle ? isPlayerTurn : true);
@@ -70,7 +78,7 @@ const ActionMenu = ({
       {/* 던전 메뉴 */}
       {gameState === 'dungeon' && (
         <div className="flex justify-center">
-          <ActionButton onClick={onDungeonNext} disabled={isProcessing} hotkey="S">
+          <ActionButton onClick={onOpenDungeonSelect} disabled={isProcessing} hotkey="S">
             던전 탐험
           </ActionButton>
           <ActionButton onClick={onDungeonRecover} disabled={isProcessing} hotkey="R">
@@ -88,33 +96,48 @@ const ActionMenu = ({
       {/* 전투 메뉴 */}
       {gameState === 'battle' && (
         <div className="flex flex-wrap justify-center">
-          <ActionButton onClick={onAttack} disabled={!canAct} hotkey="A">
-            공격
-          </ActionButton>
-          <ActionButton onClick={onDefend} disabled={!canAct} hotkey="D">
-            방어
-          </ActionButton>
-          <ActionButton onClick={onRecover} disabled={!canAct} hotkey="E">
-            회복 ({recoveryCharges})
-          </ActionButton>
-          <ActionButton onClick={onEscape} disabled={!canAct} hotkey="Q">
-            도망
-          </ActionButton>
-          {/* 배운 스킬 버튼들 */}
-          {learnedSkills.map((key) => {
-            const cd = (skillCooldowns as Record<SkillKey, number | undefined>)[key] || 0;
-            const disabled = !canAct || cd > 0;
-            return (
-              <ActionButton
-                key={key}
-                onClick={() => onUseSkill(key)}
-                disabled={disabled}
-                hotkey={cd > 0 ? `${cd}` : ''}
-              >
-                {nameOf(key)}
+          {showBattleChoice ? (
+            // 전투 승리 후 선택 메뉴
+            <>
+              <ActionButton onClick={onContinueBattle} disabled={isProcessing} hotkey="C">
+                계속 싸우기
               </ActionButton>
-            );
-          })}
+              <ActionButton onClick={onExitDungeon} disabled={isProcessing} hotkey="X">
+                던전 나가기
+              </ActionButton>
+            </>
+          ) : (
+            // 일반 전투 메뉴
+            <>
+              <ActionButton onClick={onAttack} disabled={!canAct} hotkey="A">
+                공격
+              </ActionButton>
+              <ActionButton onClick={onDefend} disabled={!canAct} hotkey="D">
+                방어
+              </ActionButton>
+              <ActionButton onClick={onRecover} disabled={!canAct} hotkey="E">
+                회복 ({recoveryCharges})
+              </ActionButton>
+              <ActionButton onClick={onEscape} disabled={!canAct} hotkey="Q">
+                도망
+              </ActionButton>
+              {/* 배운 스킬 버튼들 */}
+              {learnedSkills.map((key) => {
+                const cd = (skillCooldowns as Record<SkillKey, number | undefined>)[key] || 0;
+                const disabled = !canAct || cd > 0;
+                return (
+                  <ActionButton
+                    key={key}
+                    onClick={() => onUseSkill(key)}
+                    disabled={disabled}
+                    hotkey={cd > 0 ? `${cd}` : ''}
+                  >
+                    {nameOf(key)}
+                  </ActionButton>
+                );
+              })}
+            </>
+          )}
         </div>
       )}
     </div>

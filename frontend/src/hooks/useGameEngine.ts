@@ -8,8 +8,9 @@ import type {
   LogType,
   BattleResult,
 	EquipmentItem, // 장비 구매 기능 
+  Dungeon,
 } from '../game/types';
-import { ctrl, monsterList, skills as allSkills } from '../game/constants';
+import { ctrl, monsterList, skills as allSkills, dungeons } from '../game/constants';
 import { weaponShopList, armorShopList } from '../game/shopItems';
 import { getRandom } from '../game/utils';
 
@@ -67,9 +68,11 @@ const createNewPlayer = (name: string, job: Job): PlayerStats => {
 
 /**
  * 레벨에 맞는 몬스터를 생성합니다.
+ * @param playerLevel 플레이어 레벨
+ * @param monsterLevelOffset 던전의 몬스터 레벨 오프셋
  */
-const makeMonster = (playerLevel: number): CharacterStats => {
-  let monsterLevel = playerLevel - 1;
+const makeMonster = (playerLevel: number, monsterLevelOffset: number = 0): CharacterStats => {
+  let monsterLevel = playerLevel - 1 + monsterLevelOffset;
   if (monsterLevel < 0) monsterLevel = 0;
   if (monsterLevel >= Object.keys(monsterList).length) {
     monsterLevel = Object.keys(monsterList).length - 1;
@@ -268,6 +271,8 @@ export const useGameEngine = () => {
 	const [consecutiveMisses, setConsecutiveMisses] = useState(0); // 연속 빗나감 횟수
 	const [recoveryCharges, setRecoveryCharges] = useState(5); // 회복 횟수 추가
   const [isSkillsOpen, setIsSkillsOpen] = useState(false); // 스킬 창 모달
+  const [currentDungeonId, setCurrentDungeonId] = useState<string | null>(null); // 현재 던전 ID
+  const [showBattleChoice, setShowBattleChoice] = useState(false); // 전투 후 선택 화면 표시 여부
 
   /**
    * 로그 추가 유틸리티
@@ -485,9 +490,30 @@ export const useGameEngine = () => {
     addLogs(logs);
     setPlayer(playerAfterBattle);
     setMonster(null);
-    setGameState('dungeon');
     setIsProcessing(false);
     setIsPlayerTurn(true); // 턴 초기화
+    
+    // 승리 시에만 계속/나가기 선택 표시, 패배/도망 시에는 던전으로 복귀
+    if (type === 'victory') {
+      setShowBattleChoice(true);
+    } else {
+      setGameState('dungeon');
+    }
+  };
+
+  // 전투 후 계속하기
+  const handleContinueBattle = () => {
+    if (!player || !currentDungeonId) return;
+    setShowBattleChoice(false);
+    handleNextDungeon();
+  };
+
+  // 전투 후 던전 나가기
+  const handleExitDungeon = () => {
+    setShowBattleChoice(false);
+    setCurrentDungeonId(null);
+    setGameState('dungeon');
+    addLog('🏘️ 던전에서 나와 마을로 돌아왔다.', 'normal');
   };
 
   // --- 1. 게임 시작 ---
@@ -495,18 +521,48 @@ export const useGameEngine = () => {
     const newPlayer = createNewPlayer(name, job);
     setPlayer(newPlayer);
     setGameState('dungeon');
-    addLog(`🥾 ${newPlayer.name} (${newPlayer.job}) (이)가 던전에 들어왔다...`);
+    addLog(`🥾 ${newPlayer.name} (${newPlayer.job}) (이)가 모험을 시작했다...`);
   };
 
-  // --- 2. 던전 액션 ---
-  const handleNextDungeon = () => {
+  // --- 2. 던전 선택 및 액션 ---
+  const handleSelectDungeon = (dungeonId: string) => {
+    if (!player) return;
+    
+    const dungeon = dungeons.find(d => d.id === dungeonId);
+    if (!dungeon) return;
+    
+    if (player.level < dungeon.requiredLevel) {
+      addLog(`🚫 레벨이 부족합니다. 필요 레벨: ${dungeon.requiredLevel}`, 'fail');
+      return;
+    }
+    
+    setCurrentDungeonId(dungeonId);
+    setGameState('dungeon');
+    addLog(`🗺️ ${dungeon.icon} ${dungeon.name}에 입장했습니다.`, 'normal');
+    // 던전 입장 직후 바로 탐색 시작
+    handleNextDungeon(dungeon);
+  };
+
+  const handleOpenDungeonSelect = () => {
+    if (isProcessing) return;
+    setGameState('dungeonSelect');
+  };
+
+  const handleCloseDungeonSelect = () => {
+    setGameState('dungeon');
+  };
+
+  const handleNextDungeon = (selectedDungeon?: Dungeon) => {
     if (isProcessing || !player) return;
+    
+    const dungeon = selectedDungeon || (currentDungeonId ? dungeons.find(d => d.id === currentDungeonId) : undefined);
+    if (!dungeon) return;
     
     addLog("🧭 던전 안을 향해 들어가본다...");
     setIsProcessing(true); // 몬스터 등장 딜레이
 
     setTimeout(() => {
-      const newMonster = makeMonster(player.level);
+      const newMonster = makeMonster(player.level, dungeon.monsterLevelOffset);
       setMonster(newMonster);
       setGameState('battle');
       addLog(`👻 ${newMonster.name}이(가) 나타났다...!`, 'appear');
@@ -818,6 +874,7 @@ export const useGameEngine = () => {
 
   const handleExitShop = () => {
     addLog(`🏘️ 마을로 돌아갑니다.`, 'normal');
+    // 항상 홈(던전 메인)으로 복귀
     setGameState('dungeon');
   };
 
@@ -877,19 +934,26 @@ export const useGameEngine = () => {
     if (isProcessing) return; // 처리 중일 땐 입력 무시
 
     if (gameState === 'dungeon') {
-      if (key === 's') handleNextDungeon();
+      if (key === 's') handleOpenDungeonSelect();
       if (key === 'r') handleDungeonRecovery();
 			if (key === 'b') handleEnterShop();
       if (key === 'k') {
         if (isSkillsOpen) handleCloseSkills(); else handleOpenSkills();
       }
     } 
-    else if (gameState === 'battle' && isPlayerTurn) {
-      if (key === 'a') handleAttack();
-      if (key === 'd') handleDefend();
-      if (key === 'e') handleRecovery();
-      if (key === 'q') handleEscape();
-      // 전투 중에는 스킬 배우기 창 접근 불가
+    else if (gameState === 'battle') {
+      if (showBattleChoice) {
+        // 전투 승리 후 선택
+        if (key === 'c') handleContinueBattle();
+        if (key === 'x') handleExitDungeon();
+      } else if (isPlayerTurn) {
+        // 일반 전투 중
+        if (key === 'a') handleAttack();
+        if (key === 'd') handleDefend();
+        if (key === 'e') handleRecovery();
+        if (key === 'q') handleEscape();
+        // 전투 중에는 스킬 배우기 창 접근 불가
+      }
     }
     // 모달 공통 단축키
     if (isSkillsOpen && (key === 'k' || key === 'q')) {
@@ -910,8 +974,13 @@ export const useGameEngine = () => {
 		shopLists: { weapons: weaponShopList, armors: armorShopList },
     skills: allSkills,
     isSkillsOpen,
+    currentDungeonId,
+    showBattleChoice,
+    dungeons,
     actions: {
       gameStart,
+      handleSelectDungeon,
+      handleOpenDungeonSelect,
       handleNextDungeon,
       handleDungeonRecovery,
       handleAttack,
@@ -926,6 +995,9 @@ export const useGameEngine = () => {
       handleCloseSkills,
       handleUseSkill,
       learnSkill,
+      handleContinueBattle,
+      handleExitDungeon,
+      handleCloseDungeonSelect,
     },
   };
 };

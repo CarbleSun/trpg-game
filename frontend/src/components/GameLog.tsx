@@ -24,11 +24,62 @@ const getLogTypeClass = (type: LogType): string => {
 
 const GameLog = ({ messages }: GameLogProps) => {
   const logEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const prevMessageIdsRef = useRef<Set<number>>(new Set());
+  const isRestoringScrollRef = useRef<boolean>(false);
 
-  // 새 로그가 추가될 때마다 스크롤을 맨 아래로 이동
+  // 마운트 시 이전 스크롤 위치 복원
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const saved = sessionStorage.getItem('gameLogScrollTop');
+    if (saved && containerRef.current) {
+      isRestoringScrollRef.current = true;
+      const savedScrollTop = parseInt(saved, 10) || 0;
+      // DOM 업데이트 후 스크롤 위치 복원
+      setTimeout(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollTop = savedScrollTop;
+          isRestoringScrollRef.current = false;
+        }
+      }, 0);
+    }
+    // 현재 메시지 ID들을 저장
+    prevMessageIdsRef.current = new Set(messages.map(msg => msg.id));
+  }, []);
+
+  // 언마운트 전 스크롤 위치 저장 (화면 전환 시)
+  useEffect(() => {
+    return () => {
+      if (containerRef.current) {
+        sessionStorage.setItem('gameLogScrollTop', String(containerRef.current.scrollTop));
+      }
+    };
+  }, []);
+
+  // 새 메시지가 추가되면 항상 맨 밑으로 스크롤 (스크롤 복원 중이 아닐 때만)
+  useEffect(() => {
+    if (isRestoringScrollRef.current) return;
+    
+    const currentMessageIds = new Set(messages.map(msg => msg.id));
+    const hasNewMessages = messages.some(msg => !prevMessageIdsRef.current.has(msg.id));
+    
+    if (hasNewMessages) {
+      // 새 메시지가 있으면 항상 맨 밑으로
+      setTimeout(() => {
+        logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 0);
+    }
+    
+    prevMessageIdsRef.current = currentMessageIds;
   }, [messages]);
+
+  const handleScroll = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    // 스크롤 복원 중이 아닐 때만 저장
+    if (!isRestoringScrollRef.current) {
+      sessionStorage.setItem('gameLogScrollTop', String(el.scrollTop));
+    }
+  };
 
   // style.css의 #log
   return (
@@ -36,6 +87,8 @@ const GameLog = ({ messages }: GameLogProps) => {
       id="log"
       className="mt-10 h-[300px] min-h-[200px] overflow-y-scroll border border-gray-400
                  bg-white p-5 font-log text-sm"
+      ref={containerRef}
+      onScroll={handleScroll}
     >
       {messages.map((msg) => (
         <p

@@ -142,8 +142,18 @@ export type LogType =
   | 'gainMoney'
   | 'tryToAtk';
 
+// 던전 타입
+export interface Dungeon {
+  id: string;
+  name: string;
+  description: string;
+  requiredLevel: number;
+  monsterLevelOffset: number; // 플레이어 레벨에 더할 오프셋
+  icon: string;
+}
+
 // 게임 상태
-export type GameState = 'setup' | 'dungeon' | 'battle' | 'shop';
+export type GameState = 'setup' | 'dungeonSelect' | 'dungeon' | 'battle' | 'shop';
 
 // 전투 액션 결과 타입
 export type BattleResult = {

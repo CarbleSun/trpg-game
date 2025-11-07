@@ -1,4 +1,4 @@
-import type { MonsterList, Skill } from './types';
+import type { MonsterList, Skill, Dungeon } from './types';
 
 // 밸런스 컨트롤러
 export const ctrl = {
@@ -285,5 +285,41 @@ export const skills: Skill[] = [
     cooldown: 5,
     duration: 2,
     effect: { type: 'weaken', value: 0.3 },
+  },
+];
+
+// 던전 목록
+export const dungeons: Dungeon[] = [
+  {
+    id: 'forest',
+    name: '초원의 숲',
+    description: '초보자용 던전. 약한 몬스터들이 서식한다.',
+    requiredLevel: 1,
+    monsterLevelOffset: 0, // 플레이어 레벨 - 1
+    icon: '🌲',
+  },
+  {
+    id: 'cave',
+    name: '어둠의 동굴',
+    description: '중급자용 던전. 고블린 무리들이 살고 있다.',
+    requiredLevel: 3,
+    monsterLevelOffset: 1, // 플레이어 레벨
+    icon: '🕳️',
+  },
+  {
+    id: 'mountain',
+    name: '얼음 산맥',
+    description: '고급자용 던전. 강력한 야수들이 출몰한다.',
+    requiredLevel: 5,
+    monsterLevelOffset: 2, // 플레이어 레벨 + 1
+    icon: '⛰️',
+  },
+  {
+    id: 'abyss',
+    name: '심연의 나락',
+    description: '최고급 던전. 최강의 몬스터들이 기다린다.',
+    requiredLevel: 7,
+    monsterLevelOffset: 3, // 플레이어 레벨 + 2
+    icon: '🔥',
   },
 ];
