@@ -6,6 +6,8 @@ import ActionMenu from './components/ActionMenu';
 import Scene from './components/Scene';
 import GameLog from './components/GameLog';
 import ShopScreen from './components/ShopScreen';
+import PetEnhanceScreen from './components/PetEnhanceScreen';
+import WeaponEnhanceScreen from './components/WeaponEnhanceScreen';
 import SkillsScreen from './components/SkillsScreen';
 import DungeonSelectionScreen from './components/DungeonSelectionScreen';
 import { useGameEngine } from './hooks/useGameEngine';
@@ -92,6 +94,8 @@ function App() {
           onRecover={actions.handleRecovery}
           onEscape={actions.handleEscape}
 				onEnterShop={actions.handleEnterShop}
+          onOpenPetEnhance={actions.handleOpenPetEnhance}
+          onOpenWeaponEnhance={actions.handleOpenWeaponEnhance}
           onOpenSkills={actions.handleOpenSkills}
           onUseSkill={actions.handleUseSkill}
           onOpenDungeonSelect={actions.handleOpenDungeonSelect}
@@ -118,6 +122,28 @@ function App() {
           shopLists={shopLists}
           onExitShop={actions.handleExitShop}
           onBuyItem={actions.handleBuyItem}
+          onBuyPet={actions.handleBuyPet}
+          onEquipWeapon={actions.handleEquipWeapon}
+          onEquipArmor={actions.handleEquipArmor}
+          onEquipPet={actions.handleEquipPet}
+        />
+      )}
+
+      {/* 펫 강화소 */}
+      {gameState === 'petEnhance' && (
+        <PetEnhanceScreen
+          player={player}
+          onClose={actions.handleCloseEnhance}
+          onEnhance={actions.handleEnhancePet}
+        />
+      )}
+
+      {/* 무기 강화소 */}
+      {gameState === 'weaponEnhance' && (
+        <WeaponEnhanceScreen
+          player={player}
+          onClose={actions.handleCloseEnhance}
+          onEnhance={actions.handleEnhanceWeapon}
         />
       )}
 

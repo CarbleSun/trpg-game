@@ -16,6 +16,8 @@ interface ActionMenuProps {
   onRecover: () => void;
   onEscape: () => void;
   onEnterShop: () => void;
+  onOpenPetEnhance: () => void;
+  onOpenWeaponEnhance: () => void;
   onOpenSkills: () => void;
   onUseSkill: (key: SkillKey) => void;
   onOpenDungeonSelect: () => void;
@@ -59,6 +61,8 @@ const ActionMenu = ({
   onEscape,
   onEnterShop,
   onOpenSkills,
+  onOpenPetEnhance,
+  onOpenWeaponEnhance,
   learnedSkills = [],
   skillCooldowns = {},
   skills = [],
@@ -89,6 +93,12 @@ const ActionMenu = ({
           </ActionButton>
           <ActionButton onClick={onOpenSkills} disabled={isProcessing} hotkey="K">
             스킬
+          </ActionButton>
+          <ActionButton onClick={onOpenPetEnhance} disabled={isProcessing} hotkey="P">
+            펫강화소
+          </ActionButton>
+          <ActionButton onClick={onOpenWeaponEnhance} disabled={isProcessing} hotkey="W">
+            무기강화소
           </ActionButton>
         </div>
       )}

@@ -1,4 +1,4 @@
-import type { MonsterList, Skill, Dungeon } from './types';
+import type { MonsterList, Skill, Dungeon, Pet } from './types';
 
 // 밸런스 컨트롤러
 export const ctrl = {
@@ -23,22 +23,45 @@ export const monsterList: MonsterList = {
     ['슬라임', 1, 40, 45, 10, 0],
     ['너구리', 2, 54, 52, 15, 20],
     ['여우', 2, 61, 50, 20, 11],
+    ['작은 박쥐', 1, 38, 40, 8, 15],
+    ['초원 토끼', 1, 42, 44, 9, 12],
+    ['새싹 정령', 1, 48, 46, 12, 18],
   ],
   1: [
-    ['늑대', 2, 70, 81, 28, 18],
-    ['고블린', 3, 75, 84, 39, 30],
-    ['고블린 마법사', 3, 78, 91, 46, 30],
-    ['고블린 전사', 3, 81, 88, 67, 30],
+    ['늑대', 12, 180, 160, 70, 25],
+    ['고블린', 13, 200, 170, 85, 30],
+    ['고블린 마법사', 13, 190, 185, 90, 30],
+    ['고블린 전사', 13, 210, 175, 120, 30],
+    ['동굴 거미', 12, 170, 160, 80, 28],
+    ['동굴 박쥐', 11, 160, 150, 60, 40],
+    ['맹독 쥐', 12, 175, 165, 70, 32],
   ],
   2: [
-    ['사나운 늑대', 3, 91, 92, 50, 20],
-    ['그리즐리 베어', 4, 100, 100, 31, 14],
+    ['사나운 늑대', 22, 320, 300, 150, 25],
+    ['그리즐리 베어', 23, 380, 320, 180, 20],
+    ['설원 늑대', 23, 340, 330, 170, 25],
+    ['얼음 정령', 24, 360, 340, 190, 28],
+    ['바위 무너미', 24, 400, 310, 220, 15],
   ],
   // 레벨 3 몬스터 추가 (원본 코드의 레벨 계산 오류 방지용)
   3: [
-    ['사나운 늑대', 3, 91, 92, 50, 20],
-    ['그리즐리 베어', 4, 100, 100, 31, 14],
-    ['오우거', 5, 150, 120, 80, 10],
+    ['오우거', 33, 700, 520, 350, 20],
+    ['사막 전갈', 34, 640, 540, 300, 26],
+    ['화염 도마뱀', 34, 600, 560, 310, 24],
+    ['검은 표범', 35, 620, 580, 320, 32],
+    ['그리즐리 베어', 31, 580, 500, 300, 18],
+  ],
+  4: [
+    ['바실리스크', 42, 900, 700, 420, 30],
+    ['미노타우로스', 44, 980, 720, 460, 24],
+    ['라미아', 43, 860, 680, 400, 35],
+    ['거대 멧돼지', 41, 920, 650, 430, 26],
+  ],
+  5: [
+    ['와이번', 55, 1200, 900, 540, 36],
+    ['서리 거인', 56, 1400, 880, 600, 22],
+    ['지옥 사냥개', 54, 1100, 940, 520, 38],
+    ['망령 기사', 57, 1150, 920, 580, 30],
   ]
 };
 
@@ -295,31 +318,129 @@ export const dungeons: Dungeon[] = [
     name: '초원의 숲',
     description: '초보자용 던전. 약한 몬스터들이 서식한다.',
     requiredLevel: 1,
-    monsterLevelOffset: 0, // 플레이어 레벨 - 1
+    monsterLevelOffset: 0, // 기준 티어
     icon: '🌲',
   },
   {
     id: 'cave',
     name: '어둠의 동굴',
     description: '중급자용 던전. 고블린 무리들이 살고 있다.',
-    requiredLevel: 3,
-    monsterLevelOffset: 1, // 플레이어 레벨
+    requiredLevel: 11,
+    monsterLevelOffset: 1, // 기준 티어 +1
     icon: '🕳️',
   },
   {
     id: 'mountain',
     name: '얼음 산맥',
     description: '고급자용 던전. 강력한 야수들이 출몰한다.',
-    requiredLevel: 5,
-    monsterLevelOffset: 2, // 플레이어 레벨 + 1
+    requiredLevel: 21,
+    monsterLevelOffset: 2, // 기준 티어 +2
     icon: '⛰️',
   },
   {
     id: 'abyss',
     name: '심연의 나락',
     description: '최고급 던전. 최강의 몬스터들이 기다린다.',
-    requiredLevel: 7,
-    monsterLevelOffset: 3, // 플레이어 레벨 + 2
+    requiredLevel: 31,
+    monsterLevelOffset: 3, // 기준 티어 +3
     icon: '🔥',
+  },
+];
+
+// 간단한 스타터 펫 목록
+export const starterPets: Pet[] = [
+  {
+    id: 'cat',
+    name: '길냥이',
+    icon: '🐱',
+    kind: 'attack',
+    power: 0.2, // 플레이어 유효 ATK의 20%
+    description: '플레이어 턴 시작마다 살짝 할퀴어 피해를 준다.',
+  },
+  {
+    id: 'fairy',
+    name: '작은 요정',
+    icon: '🧚',
+    kind: 'heal',
+    power: 0.05, // 최대 HP의 5%
+    description: '플레이어 턴 시작마다 소량의 체력을 회복시킨다.',
+  },
+];
+
+// 상점용 펫 목록 (가격 포함)
+export const petShopList: Array<Pet & { price: number }> = [
+  { ...starterPets[0], price: 300 },
+  { ...starterPets[1], price: 350 },
+  {
+    id: 'wolf',
+    name: '야생 늑대',
+    icon: '🐺',
+    kind: 'attack',
+    power: 0.25,
+    description: '플레이어 턴 시작마다 강하게 물어뜯어 피해를 준다.',
+    price: 500,
+  },
+  {
+    id: 'dragon',
+    name: '새끼 용',
+    icon: '🐉',
+    kind: 'attack',
+    power: 0.35,
+    description: '플레이어 턴 시작마다 화염 브레스를 뿜어 큰 피해를 준다.',
+    price: 1000,
+  },
+  {
+    id: 'phoenix',
+    name: '불사조',
+    icon: '🔥',
+    kind: 'heal',
+    power: 0.08,
+    description: '플레이어 턴 시작마다 재생의 불꽃으로 체력을 회복시킨다.',
+    price: 800,
+  },
+  {
+    id: 'unicorn',
+    name: '유니콘',
+    icon: '🦄',
+    kind: 'heal',
+    power: 0.12,
+    description: '플레이어 턴 시작마다 신성한 힘으로 많은 체력을 회복시킨다.',
+    price: 1200,
+  },
+  {
+    id: 'slime',
+    name: '킹 슬라임',
+    icon: '👑',
+    kind: 'attack',
+    power: 0.15,
+    description: '플레이어 턴 시작마다 점액을 발사해 피해를 준다.',
+    price: 400,
+  },
+  {
+    id: 'spirit',
+    name: '정령',
+    icon: '✨',
+    kind: 'heal',
+    power: 0.06,
+    description: '플레이어 턴 시작마다 자연의 힘으로 체력을 회복시킨다.',
+    price: 450,
+  },
+  {
+    id: 'demon',
+    name: '작은 악마',
+    icon: '😈',
+    kind: 'attack',
+    power: 0.3,
+    description: '플레이어 턴 시작마다 어둠의 화살을 발사해 피해를 준다.',
+    price: 900,
+  },
+  {
+    id: 'angel',
+    name: '수호 천사',
+    icon: '👼',
+    kind: 'heal',
+    power: 0.15,
+    description: '플레이어 턴 시작마다 천상의 축복으로 많은 체력을 회복시킨다.',
+    price: 1500,
   },
 ];

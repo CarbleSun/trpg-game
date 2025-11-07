@@ -18,8 +18,20 @@ const DungeonSelectionScreen = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl p-8 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <>
+      {/* 배경 오버레이 (상점과 동일 스타일) */}
+      <div 
+        className="fixed inset-0 z-40 bg-[rgba(0,0,0,0.5)] backdrop-blur-sm" 
+        onClick={onExit}
+      ></div>
+
+      {/* 모달 컨텐츠 컨테이너 */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        {/* 내부 클릭 시 닫기 방지 */}
+        <div 
+          className="relative w-full max-w-4xl rounded-lg bg-white p-8 shadow-xl font-stat max-h-[90vh] overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
         <h2 className="text-3xl font-bold mb-4 text-center">던전 선택</h2>
         <p className="text-center text-gray-600 mb-6">
           현재 레벨: <span className="font-bold text-blue-600">{player.level}</span>
@@ -65,8 +77,9 @@ const DungeonSelectionScreen = ({
             취소
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

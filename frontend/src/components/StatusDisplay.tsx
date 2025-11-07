@@ -9,8 +9,10 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
 	// 유효 스탯 계산
   const weaponAtk = player.weapon?.value || 0;
   const armorDef = player.armor?.value || 0;
-  const totalAtk = player.atk + weaponAtk;
-  const totalDef = player.def + armorDef;
+  const weaponEnh = player.weapon ? ((player.weaponEnhanceLevels || {})[player.weapon.id] || 0) * 5 : 0;
+  const armorEnh = player.armor ? ((player.armorEnhanceLevels || {})[player.armor.id] || 0) * 5 : 0;
+  const totalAtk = player.atk + weaponAtk + weaponEnh;
+  const totalDef = player.def + armorDef + armorEnh;
 
   // style.css의 .status, .info, .info-basic 등 변환
   return (
@@ -49,11 +51,11 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
       <div className="w-full grow p-4 text-sm md:w-auto">
         <div className="flex">
           <div className="mr-2 min-w-[30px] text-red-600">ATK</div>
-          <div className="text-gray-700">{totalAtk} ( {player.atk} + <span className="text-red-500">{weaponAtk}</span> )</div>
+          <div className="text-gray-700">{totalAtk} ( {player.atk} + <span className="text-red-500">{weaponAtk}</span>{weaponEnh > 0 ? <> + <span className="text-rose-600">{weaponEnh}</span></> : null} )</div>
         </div>
         <div className="flex">
           <div className="mr-2 min-w-[30px] text-blue-600">DEF</div>
-          <div className="text-gray-700">{totalDef} ( {player.def} + <span className="text-blue-500">{armorDef}</span> )</div>
+          <div className="text-gray-700">{totalDef} ( {player.def} + <span className="text-blue-500">{armorDef}</span>{armorEnh > 0 ? <> + <span className="text-sky-700">{armorEnh}</span></> : null} )</div>
         </div>
         <div className="flex">
           <div className="mr-2 min-w-[30px] text-green-600">LUK</div>
@@ -61,10 +63,13 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
         </div>
         <div className="mt-2 border-t pt-2">
           <div className="text-xs text-gray-500">
-            무기: {player.weapon?.name || '없음'}
+            무기: {player.weapon ? `${player.weapon.name}${weaponEnh > 0 ? ` [${(player.weaponEnhanceLevels || {})[player.weapon.id] || 0}강]` : ''}` : '없음'}
           </div>
           <div className="text-xs text-gray-500">
-            방어: {player.armor?.name || '없음'}
+            방어: {player.armor ? `${player.armor.name}${armorEnh > 0 ? ` [${(player.armorEnhanceLevels || {})[player.armor.id] || 0}강]` : ''}` : '없음'}
+          </div>
+          <div className="text-xs text-gray-500">
+            펫: {player.pet ? `${player.pet.icon} ${player.pet.name}${(player.petEnhanceLevels || {})[player.pet.id] ? ` [${(player.petEnhanceLevels || {})[player.pet.id]}강]` : ''}` : '없음'}
           </div>
         </div>
       </div>
@@ -80,6 +85,8 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
           <div className="text-gray-700">{player.defCount}회</div>
         </div>
       </div>
+
+      {/* 펫 표시는 상단 UI에서 숨김 */}
 
     </div>
   );

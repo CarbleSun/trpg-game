@@ -42,6 +42,18 @@ export interface PlayerStats extends CharacterStats {
   defCount: number;
   weapon: EquipmentItem | null; // 무기
   armor: EquipmentItem | null; // 방어구
+  // 펫 시스템
+  pet?: Pet | null;
+  // 강화 시스템
+  weaponUpgradeLevel?: number; // [deprecated] 전역 무기 강화 레벨
+  petPowerBonus?: number; // [deprecated] 전역 펫 보너스
+  weaponEnhanceLevels?: Record<string, number>; // 무기별 강화 레벨
+  armorEnhanceLevels?: Record<string, number>; // 방어구별 강화 레벨
+  petEnhanceLevels?: Record<string, number>; // 펫별 강화 레벨
+  // 보유 목록
+  ownedWeaponIds?: string[];
+  ownedArmorIds?: string[];
+  ownedPetIds?: string[];
   // 스킬 시스템
   skillPoints: number; // 보유 스킬 포인트
   skills: SkillKey[]; // 습득한 스킬 키 목록
@@ -61,6 +73,17 @@ export interface PlayerStats extends CharacterStats {
   }>; // 임시 버프
   skillCooldowns?: Partial<Record<SkillKey, number>>; // 남은 쿨다운 턴
   monsterStunnedTurns?: number;
+}
+
+// 펫 타입
+export interface Pet {
+  id: string;
+  name: string;
+  icon: string; // 이모지 등 간단 표현
+  kind: 'attack' | 'heal';
+  // 공격형: 플레이어 유효 ATK의 비율로 피해, 치유형: 최대 HP 비율로 회복
+  power: number; // 예) 0.2 => 20%
+  description: string;
 }
 
 // 스킬 키 및 스킬 타입 (전부 액티브)
@@ -153,7 +176,14 @@ export interface Dungeon {
 }
 
 // 게임 상태
-export type GameState = 'setup' | 'dungeonSelect' | 'dungeon' | 'battle' | 'shop';
+export type GameState =
+  | 'setup'
+  | 'dungeonSelect'
+  | 'dungeon'
+  | 'battle'
+  | 'shop'
+  | 'petEnhance'
+  | 'weaponEnhance';
 
 // 전투 액션 결과 타입
 export type BattleResult = {

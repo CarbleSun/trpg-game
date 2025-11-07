@@ -10,7 +10,7 @@ import type {
 	EquipmentItem, // 장비 구매 기능 
   Dungeon,
 } from '../game/types';
-import { ctrl, monsterList, skills as allSkills, dungeons } from '../game/constants';
+import { ctrl, monsterList, skills as allSkills, dungeons, petShopList } from '../game/constants';
 import { weaponShopList, armorShopList } from '../game/shopItems';
 import { getRandom } from '../game/utils';
 
@@ -61,6 +61,13 @@ const createNewPlayer = (name: string, job: Job): PlayerStats => {
     defCount: 0,
 		weapon: null,
     armor: null,
+    pet: null,
+    weaponEnhanceLevels: {},
+    armorEnhanceLevels: {},
+    petEnhanceLevels: {},
+    ownedWeaponIds: [],
+    ownedArmorIds: [],
+    ownedPetIds: [],
     skillPoints: 0,
     skills: [],
   };
@@ -72,13 +79,14 @@ const createNewPlayer = (name: string, job: Job): PlayerStats => {
  * @param monsterLevelOffset 던전의 몬스터 레벨 오프셋
  */
 const makeMonster = (playerLevel: number, monsterLevelOffset: number = 0): CharacterStats => {
-  let monsterLevel = playerLevel - 1 + monsterLevelOffset;
-  if (monsterLevel < 0) monsterLevel = 0;
-  if (monsterLevel >= Object.keys(monsterList).length) {
-    monsterLevel = Object.keys(monsterList).length - 1;
-  }
-  
-  const list = monsterList[monsterLevel];
+  // 플레이어 레벨을 10레벨 단위의 티어로 변환 후, 던전 오프셋 적용
+  const baseTier = Math.floor((playerLevel - 1) / 10);
+  let monsterTier = baseTier + monsterLevelOffset;
+  if (monsterTier < 0) monsterTier = 0;
+  const maxTier = Object.keys(monsterList).length - 1;
+  if (monsterTier > maxTier) monsterTier = maxTier;
+
+  const list = monsterList[monsterTier];
   const [name, level, hp, atk, def, luk] = list[getRandom(0, list.length - 1)];
 
   return {
@@ -291,13 +299,44 @@ export const useGameEngine = () => {
     setLogMessages((prev) => [...prev, ...newLogs]);
   };
 
+  // 펫: 플레이어 턴 시작 시 자동 동작
+  const applyPetStartOfTurn = (
+    currentPlayer: PlayerStats,
+    currentMonster: CharacterStats | null,
+  ): { player: PlayerStats; monster: CharacterStats | null } => {
+    if (!currentPlayer.pet || !currentMonster) return { player: currentPlayer, monster: currentMonster };
+    const pet = currentPlayer.pet;
+    const petLevel = (currentPlayer.petEnhanceLevels || {})[pet.id] || 0;
+    const petBonus = petLevel * 0.05;
+    if (pet.kind === 'attack') {
+      const effective = getEffectivePlayerStats(currentPlayer);
+      const dmg = Math.max(1, Math.floor(effective.atk * (pet.power + petBonus)));
+      const nextMonster = { ...currentMonster, hp: Math.max(0, currentMonster.hp - dmg) };
+      addLog(`${pet.icon} ${pet.name}이(가) 적을 공격! ${dmg} 피해 (적 HP: ${nextMonster.hp})`, 'atk');
+      return { player: currentPlayer, monster: nextMonster };
+    }
+    if (pet.kind === 'heal') {
+      const heal = Math.max(1, Math.floor(currentPlayer.maxHp * (pet.power + petBonus)));
+      const nextHp = Math.min(currentPlayer.maxHp, currentPlayer.hp + heal);
+      if (nextHp !== currentPlayer.hp) {
+        addLog(`${pet.icon} ${pet.name}이(가) 치유의 가루를 뿌렸다! HP +${nextHp - currentPlayer.hp}`, 'normal');
+      }
+      return { player: { ...currentPlayer, hp: nextHp }, monster: currentMonster };
+    }
+    return { player: currentPlayer, monster: currentMonster };
+  };
+
 	/** 플레이어 유효 스탯 계산기
    * 플레이어의 기본 스탯과 장비 스탯을 합산하여
    * 전투에 실제 사용될 '유효 스탯' 객체를 반환합니다.
    */
   const getEffectivePlayerStats = (p: PlayerStats): CharacterStats => {
     const weaponAtk = p.weapon?.value || 0;
+    const weaponEnhLevel = p.weapon ? ((p.weaponEnhanceLevels || {})[p.weapon.id] || 0) : 0;
+    const weaponEnhBonus = weaponEnhLevel * 5; // 무기 강화: 레벨당 ATK +5
     const armorDef = p.armor?.value || 0;
+    const armorEnhLevel = p.armor ? ((p.armorEnhanceLevels || {})[p.armor.id] || 0) : 0;
+    const armorEnhBonus = armorEnhLevel * 5; // 방어구 강화: 레벨당 DEF +5
 
     // 활성 버프 합산
     const buffs = (p.activeBuffs || []).reduce((acc, b) => {
@@ -312,8 +351,8 @@ export const useGameEngine = () => {
       level: p.level,
       hp: p.hp,
       maxHp: p.maxHp,
-      atk: p.atk + weaponAtk + buffs.atk,
-      def: p.def + armorDef + buffs.def,
+      atk: p.atk + weaponAtk + weaponEnhBonus + buffs.atk,
+      def: p.def + armorDef + armorEnhBonus + buffs.def,
       luk: p.luk + buffs.luk,
       isDefending: p.isDefending,
     };
@@ -362,7 +401,14 @@ export const useGameEngine = () => {
         // 플레이어 턴으로 전환
         addLog(`--- 플레이어의 턴 ---`, 'normal');
         const ticked = tickSkills(nextPlayer);
-        setPlayer(ticked);
+        const afterPet = applyPetStartOfTurn(ticked, currentMonster);
+        setPlayer(afterPet.player);
+        setMonster(afterPet.monster);
+        if (afterPet.monster && afterPet.monster.hp <= 0) {
+          handleBattleEnd('victory', afterPet.player, afterPet.monster);
+          setIsProcessing(false);
+          return;
+        }
         setIsPlayerTurn(true);
         setIsProcessing(false);
         return;
@@ -378,7 +424,14 @@ export const useGameEngine = () => {
         setPlayer(updatedAfterBarrier);
         addLog(`--- 플레이어의 턴 ---`, 'normal');
         const ticked = tickSkills(updatedAfterBarrier);
-        setPlayer(ticked);
+        const afterPet = applyPetStartOfTurn(ticked, currentMonster);
+        setPlayer(afterPet.player);
+        setMonster(afterPet.monster);
+        if (afterPet.monster && afterPet.monster.hp <= 0) {
+          handleBattleEnd('victory', afterPet.player, afterPet.monster);
+          setIsProcessing(false);
+          return;
+        }
         setIsPlayerTurn(true);
         setIsProcessing(false);
         return;
@@ -389,7 +442,14 @@ export const useGameEngine = () => {
         addLog(`🍃 그림자처럼 공격을 모두 회피했다!`, 'fail');
         addLog(`--- 플레이어의 턴 ---`, 'normal');
         const ticked = tickSkills(currentPlayer);
-        setPlayer(ticked);
+        const afterPet = applyPetStartOfTurn(ticked, currentMonster);
+        setPlayer(afterPet.player);
+        setMonster(afterPet.monster);
+        if (afterPet.monster && afterPet.monster.hp <= 0) {
+          handleBattleEnd('victory', afterPet.player, afterPet.monster);
+          setIsProcessing(false);
+          return;
+        }
         setIsPlayerTurn(true);
         setIsProcessing(false);
         return;
@@ -434,9 +494,16 @@ export const useGameEngine = () => {
       } else {
         // 플레이어 턴으로 전환
         addLog(`--- 플레이어의 턴 ---`, 'normal');
-        // 턴 시작 시 스킬 지속/쿨다운 감소
+        // 턴 시작 시 스킬 지속/쿨다운 감소 + 펫 동작
         const ticked = tickSkills(updatedPlayer);
-        setPlayer(ticked);
+        const afterPet = applyPetStartOfTurn(ticked, updatedMonster);
+        setPlayer(afterPet.player);
+        setMonster(afterPet.monster);
+        if (afterPet.monster && afterPet.monster.hp <= 0) {
+          handleBattleEnd('victory', afterPet.player, afterPet.monster);
+          setIsProcessing(false);
+          return;
+        }
         setIsPlayerTurn(true);
         setIsProcessing(false);
       }
@@ -572,9 +639,16 @@ export const useGameEngine = () => {
       // 선공 결정 (원본)
       if (getRandom(1, 100) <= 50) {
         addLog(`😁 선빵필승! ${player.name}은(는) 먼저 공격할 수 있다.`);
-        // 턴 시작 시 스킬 지속/쿨다운 감소
+        // 턴 시작 시 스킬 지속/쿨다운 감소 + 펫 동작
         const ticked = tickSkills(player);
-        setPlayer(ticked);
+        const afterPet = applyPetStartOfTurn(ticked, newMonster);
+        setPlayer(afterPet.player);
+        setMonster(afterPet.monster);
+        if (afterPet.monster && afterPet.monster.hp <= 0) {
+          handleBattleEnd('victory', afterPet.player, afterPet.monster);
+          setIsProcessing(false);
+          return;
+        }
         setIsPlayerTurn(true);
         setIsProcessing(false);
       } else {
@@ -904,29 +978,135 @@ export const useGameEngine = () => {
       return;
     }
     
-    // 이미 장착한 아이템인지 확인 (중복구매 방지)
-    if (item.type === 'weapon' && player.weapon?.id === item.id) {
-      addLog(`🚫 이미 장착중인 무기입니다.`, 'fail');
-      return;
-    }
-    if (item.type === 'armor' && player.armor?.id === item.id) {
-      addLog(`🚫 이미 장착중인 방어구입니다.`, 'fail');
-      return;
-    }
-
     // 구매 처리
     setPlayer(prevPlayer => {
       if (!prevPlayer) return null;
-      return {
+      const next = {
         ...prevPlayer,
         money: prevPlayer.money - item.price,
-        // 장비 교체
-        weapon: item.type === 'weapon' ? item : prevPlayer.weapon,
-        armor: item.type === 'armor' ? item : prevPlayer.armor,
+        ownedWeaponIds: item.type === 'weapon' ? [ ...(prevPlayer.ownedWeaponIds || []), item.id ] : (prevPlayer.ownedWeaponIds || []),
+        ownedArmorIds: item.type === 'armor' ? [ ...(prevPlayer.ownedArmorIds || []), item.id ] : (prevPlayer.ownedArmorIds || []),
       };
+      return next;
     });
+    addLog(`✨ ${item.name}을(를) 구매했습니다! (장착은 장착하기 버튼)`, 'gainMoney');
+  };
 
-    addLog(`✨ ${item.name}을(를) 구매/장착했습니다!`, 'gainMoney');
+  // 펫 구매
+  const handleBuyPet = (petId: string) => {
+    if (!player) return;
+    const petItem = petShopList.find(p => p.id === petId);
+    if (!petItem) return;
+    if (player.money < petItem.price) {
+      addLog(`💰 골드가 부족합니다. (필요: ${petItem.price} G)`, 'fail');
+      return;
+    }
+    setPlayer(prev => prev ? { ...prev, money: prev.money - petItem.price, ownedPetIds: [ ...(prev.ownedPetIds || []), petItem.id ] } : prev);
+    addLog(`✨ 새로운 펫 획득! ${petItem.icon} ${petItem.name} (장착 가능)`, 'gainMoney');
+  };
+
+  // 장착 핸들러
+  const handleEquipWeapon = (id: string) => {
+    const all = weaponShopList;
+    const found = all.find(w => w.id === id);
+    if (!player || !found) return;
+    if (!(player.ownedWeaponIds || []).includes(id)) {
+      addLog('🚫 소유하지 않은 무기입니다.', 'fail');
+      return;
+    }
+    setPlayer(prev => prev ? { ...prev, weapon: found } : prev);
+    addLog(`⚔️ 무기 장착: ${found.name}`, 'normal');
+  };
+  const handleEquipArmor = (id: string) => {
+    const all = armorShopList;
+    const found = all.find(a => a.id === id);
+    if (!player || !found) return;
+    if (!(player.ownedArmorIds || []).includes(id)) {
+      addLog('🚫 소유하지 않은 방어구입니다.', 'fail');
+      return;
+    }
+    setPlayer(prev => prev ? { ...prev, armor: found } : prev);
+    addLog(`🛡️ 방어구 장착: ${found.name}`, 'normal');
+  };
+  const handleEquipPet = (id: string) => {
+    const found = petShopList.find(p => p.id === id);
+    if (!player || !found) return;
+    if (!(player.ownedPetIds || []).includes(id)) {
+      addLog('🚫 소유하지 않은 펫입니다.', 'fail');
+      return;
+    }
+    setPlayer(prev => prev ? { ...prev, pet: found } : prev);
+    addLog(`🐾 펫 장착: ${found.icon} ${found.name}`, 'normal');
+  };
+
+  // 강화소 열기/닫기
+  const handleOpenPetEnhance = () => {
+    addLog(`🧪 펫 강화소에 입장했습니다.`, 'normal');
+    setGameState('petEnhance');
+  };
+  const handleOpenWeaponEnhance = () => {
+    addLog(`🔧 무기 강화소에 입장했습니다.`, 'normal');
+    setGameState('weaponEnhance');
+  };
+  const handleCloseEnhance = () => {
+    addLog(`🏘️ 마을로 돌아갑니다.`, 'normal');
+    setGameState('dungeon');
+  };
+
+  // 강화 로직
+  const getPetEnhanceCost = (level: number) => 100 + level * 100;
+  const handleEnhancePet = () => {
+    if (!player || !player.pet) {
+      addLog(`🚫 강화할 펫이 없습니다.`, 'fail');
+      return;
+    }
+    const petId = player.pet.id;
+    const level = (player.petEnhanceLevels || {})[petId] || 0;
+    const cost = getPetEnhanceCost(level);
+    if (player.money < cost) {
+      addLog(`💰 골드가 부족합니다. (필요: ${cost} G)`, 'fail');
+      return;
+    }
+    const nextLevel = level + 1;
+    setPlayer(prev => prev ? { ...prev, money: prev.money - cost, petEnhanceLevels: { ...(prev.petEnhanceLevels || {}), [petId]: nextLevel } } : prev);
+    addLog(`🧪 펫 강화! 파워 +5% (누적 +${nextLevel * 5}%)`, 'lvup');
+  };
+
+  // 방어구 강화 (추가)
+  const getArmorEnhanceCost = (level: number) => 150 + level * 150;
+  const handleEnhanceArmor = () => {
+    if (!player || !player.armor) {
+      addLog(`🚫 강화할 방어구가 없습니다.`, 'fail');
+      return;
+    }
+    const armorId = player.armor.id;
+    const level = (player.armorEnhanceLevels || {})[armorId] || 0;
+    const cost = getArmorEnhanceCost(level);
+    if (player.money < cost) {
+      addLog(`💰 골드가 부족합니다. (필요: ${cost} G)`, 'fail');
+      return;
+    }
+    const nextLevel = level + 1;
+    setPlayer(prev => prev ? { ...prev, money: prev.money - cost, armorEnhanceLevels: { ...(prev.armorEnhanceLevels || {}), [armorId]: nextLevel } } : prev);
+    addLog(`🛡️ 방어구 강화! DEF +5 (강화 ${nextLevel}단)`, 'lvup');
+  };
+
+  const getWeaponEnhanceCost = (level: number) => 150 + level * 150;
+  const handleEnhanceWeapon = () => {
+    if (!player || !player.weapon) {
+      addLog(`🚫 강화할 무기가 없습니다.`, 'fail');
+      return;
+    }
+    const weaponId = player.weapon.id;
+    const level = (player.weaponEnhanceLevels || {})[weaponId] || 0;
+    const cost = getWeaponEnhanceCost(level);
+    if (player.money < cost) {
+      addLog(`💰 골드가 부족합니다. (필요: ${cost} G)`, 'fail');
+      return;
+    }
+    const nextLevel = level + 1;
+    setPlayer(prev => prev ? { ...prev, money: prev.money - cost, weaponEnhanceLevels: { ...(prev.weaponEnhanceLevels || {}), [weaponId]: nextLevel } } : prev);
+    addLog(`🔧 무기 강화! ATK +5 (강화 ${nextLevel}단)`, 'lvup');
   };
   
   // 키보드 이벤트 핸들러 (단축키)
@@ -971,12 +1151,12 @@ export const useGameEngine = () => {
     isProcessing,
 		recoveryCharges, // UI에 횟수를 표시하기 위해 추가
     consecutiveMisses, // (이전 요청에서 추가됨)
-		shopLists: { weapons: weaponShopList, armors: armorShopList },
     skills: allSkills,
     isSkillsOpen,
     currentDungeonId,
     showBattleChoice,
     dungeons,
+    shopLists: { weapons: weaponShopList, armors: armorShopList, pets: petShopList },
     actions: {
       gameStart,
       handleSelectDungeon,
@@ -991,6 +1171,16 @@ export const useGameEngine = () => {
 			handleEnterShop, // 상점
       handleExitShop,
       handleBuyItem,
+      handleBuyPet,
+      handleEquipWeapon,
+      handleEquipArmor,
+      handleEquipPet,
+      handleOpenPetEnhance,
+      handleOpenWeaponEnhance,
+      handleEnhanceArmor,
+      handleCloseEnhance,
+      handleEnhancePet,
+      handleEnhanceWeapon,
       handleOpenSkills,
       handleCloseSkills,
       handleUseSkill,
