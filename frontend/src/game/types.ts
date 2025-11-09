@@ -13,6 +13,16 @@ export interface CharacterStats {
 // 직업 타입
 export type Job = "마법사" | "전사" | "도적";
 
+// 장비 아이템 타입
+export interface EquipmentItem {
+  id: string;
+  name: string;
+  type: 'weapon' | 'armor';
+  value: number; // (공격력 또는 방어력)
+  price: number;
+  allowedJobs?: Job[]; // <--  JOB 제한
+}
+
 // 플레이어 스탯 (캐릭터 확장)
 export interface PlayerStats extends CharacterStats {
   exp: number;
@@ -92,28 +102,33 @@ export interface Pet {
 
 // 스킬 키 및 스킬 타입 (전부 액티브)
 export type SkillKey =
-  | 'shadowVeil'
-  | 'phantomStrike'
-  | 'bladeFlurry'
-  | 'vampiricAura'
+// 마법사
   | 'hex'
-  | 'shadowBind'
-  | 'timeStop'
-  | 'arcaneBarrier'
-  | 'warSmash'
-  | 'battleCryWar'
-  | 'frostNova'
-  | 'arcaneSurge'
   | 'manaShield'
+  | 'IceAge'
+  | 'arcaneSurge'
+  | 'phantomStrike'
+  | 'vampiricAura'
   | 'drainingCurse'
+	| 'THEWORLD'
+
+// 전사
   | 'ironWill'
-  | 'berserkRush'
+  | 'arcaneBarrier'
+  | 'battleCryWar'
   | 'cleave'
   | 'crushingRoar'
+  | 'warSmash'
+  | 'berserkRush'
+
+// 도적
+  | 'shadowVeil'
+  | 'bladeFlurry'
   | 'smokeBomb'
   | 'assassinatePrep'
   | 'flurry'
-  | 'nerveStrike';
+  | 'nerveStrike'
+  | 'shadowBind';
 
 export interface Skill {
   key: SkillKey;

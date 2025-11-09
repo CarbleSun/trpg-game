@@ -29,6 +29,16 @@ const jobStatModifiers = {
   "도적": { hp: 1.0, atk: 1.0, def: 1.0, luk: 1.3 },
 };
 
+// 기본 무기 제공
+const STARTER_CLUB: EquipmentItem = {
+  id: 'w_starter_club', // 상점 ID와 겹치지 않는 고유 ID
+  name: '나무 몽둥이',
+  type: 'weapon',
+  value: 4, // 몽둥이 공격력
+  price: 0, // 상점 아이템이 아님
+  allowedJobs: ['전사', '마법사', '도적'], // 전직업 공용
+};
+
 /**
  * 신규 플레이어 스탯을 생성합니다. (편차 적용 수정됨)
  */
@@ -45,6 +55,10 @@ const createNewPlayer = (name: string, job: Job): PlayerStats => {
   const luk = Math.floor((level * levUpVal.luk * mod.luk) * (1 + bonus[2] / 100));
   const hp = Math.floor(((level * levUpVal.hp[0]) + (level * levUpVal.hp[1])) * mod.hp);
   
+	// 기본 무기 지급
+  const starterWeapon: EquipmentItem = STARTER_CLUB; 
+  const starterWeaponId = starterWeapon?.id;
+
   return {
     name,
     job,
@@ -59,13 +73,13 @@ const createNewPlayer = (name: string, job: Job): PlayerStats => {
     goalExp: (level * 30) + (level * 120),
     vicCount: 0,
     defCount: 0,
-		weapon: null,
+		weapon: starterWeapon, // 기본 무기 장착
     armor: null,
     pet: null,
     weaponEnhanceLevels: {},
     armorEnhanceLevels: {},
     petEnhanceLevels: {},
-    ownedWeaponIds: [],
+    ownedWeaponIds: [starterWeaponId],
     ownedArmorIds: [],
     ownedPetIds: [],
     skillPoints: 0,

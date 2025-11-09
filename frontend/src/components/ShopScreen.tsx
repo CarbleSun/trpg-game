@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import type { PlayerStats, EquipmentItem } from '../game/types';
+import type { PlayerStats, EquipmentItem, Job } from '../game/types';
 import type { useGameEngine } from '../hooks/useGameEngine';
 
 type ShopLists = ReturnType<typeof useGameEngine>['shopLists'];
 type ShopTab = 'weapon' | 'armor' | 'pet';
+type JobFilterTab = Job | 'ALL' | 'COMMON';
 
 interface ShopScreenProps {
   player: PlayerStats;
@@ -29,8 +30,57 @@ const TabButton = ({ label, isActive, onClick }: { label: string; isActive: bool
   </button>
 );
 
+const JobTabButton = ({ label, isActive, onClick }: { label: string; isActive: boolean; onClick: () => void }) => (
+  <button
+    onClick={onClick}
+    className={`py-1 px-4 font-stat text-sm rounded-t-md ${
+      isActive
+        ? 'bg-gray-100 text-blue-600' // 활성
+        : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50' // 비활성
+    }`}
+  >
+    {label}
+  </button>
+);
+
+
 const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEquipWeapon, onEquipArmor, onEquipPet }: ShopScreenProps) => {
   const [activeTab, setActiveTab] = useState<ShopTab>('weapon');
+  const [activeJobFilter, setActiveJobFilter] = useState<JobFilterTab>('ALL');
+
+  const filterItems = (items: EquipmentItem[]) => {
+    if (activeJobFilter === 'ALL') {
+      return items; 
+    }
+    return items.filter(item => {
+      if (activeJobFilter === 'COMMON') {
+        return !item.allowedJobs || (item.allowedJobs.includes('전사') && item.allowedJobs.includes('마법사') && item.allowedJobs.includes('도적'));
+      }
+      return item.allowedJobs?.includes(activeJobFilter);
+    });
+  };
+
+  const filteredWeapons = filterItems(shopLists.weapons);
+  const filteredArmors = filterItems(shopLists.armors);
+
+  // 텍스트 생성 로직을 헬퍼 함수로 분리
+  const getJobText = (item: EquipmentItem) => {
+    if (!item.allowedJobs || item.allowedJobs.length === 0) {
+      return ''; // allowedJobs가 없으면 빈 문자열
+    }
+    
+    // 3직업 모두 포함하는지 확인
+    const isCommon = item.allowedJobs.includes('전사') &&
+                     item.allowedJobs.includes('마법사') &&
+                     item.allowedJobs.includes('도적');
+    
+    if (isCommon) {
+      return '(직업 공용)'; 
+    }
+    
+    // 그 외 (예: 1~2개 직업 제한)
+    return `(${item.allowedJobs.join('/')} 전용)`;
+  };
 
   return (
     <>
@@ -53,26 +103,43 @@ const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEqui
             </div>
           </div>
 
-          {/* 탭 버튼 */}
+          {/* 메인 탭 버튼 */}
           <div className="mb-4 flex border-b">
-            <TabButton label="⚔️ 무기" isActive={activeTab === 'weapon'} onClick={() => setActiveTab('weapon')} />
-            <TabButton label="🛡️ 방어구" isActive={activeTab === 'armor'} onClick={() => setActiveTab('armor')} />
+            <TabButton label="⚔️ 무기" isActive={activeTab === 'weapon'} onClick={() => { setActiveTab('weapon'); setActiveJobFilter('ALL'); }} />
+            <TabButton label="🛡️ 방어구" isActive={activeTab === 'armor'} onClick={() => { setActiveTab('armor'); setActiveJobFilter('ALL'); }} />
             <TabButton label="🐾 펫" isActive={activeTab === 'pet'} onClick={() => setActiveTab('pet')} />
           </div>
 
-          <div className="max-h-[60vh] overflow-y-auto pr-2">
+          {/* 직업 필터 탭 */}
+          { (activeTab === 'weapon' || activeTab === 'armor') && (
+            <div className="mb-3 flex space-x-2">
+              <JobTabButton label="전체" isActive={activeJobFilter === 'ALL'} onClick={() => setActiveJobFilter('ALL')} />
+              <JobTabButton label="전사" isActive={activeJobFilter === '전사'} onClick={() => setActiveJobFilter('전사')} />
+              <JobTabButton label="마법사" isActive={activeJobFilter === '마법사'} onClick={() => setActiveJobFilter('마법사')} />
+              <JobTabButton label="도적" isActive={activeJobFilter === '도적'} onClick={() => setActiveJobFilter('도적')} />
+              {/* '공용' 버튼은 방어구 탭일 때만 표시 */}
+              {activeTab === 'armor' && (
+                <JobTabButton label="공용" isActive={activeJobFilter === 'COMMON'} onClick={() => setActiveJobFilter('COMMON')} />
+              )}
+            </div>
+          )}
+
+          <div className="max-h-[55vh] overflow-y-auto pr-2">
             
             {activeTab === 'weapon' && (
               <section>
                 <div className="grid grid-cols-2 gap-3"> 
-                  {shopLists.weapons.map(item => {
+                  {filteredWeapons.map(item => {
                     const owned = (player.ownedWeaponIds || []).includes(item.id);
                     const equipped = player.weapon?.id === item.id;
                     const canAfford = player.money >= item.price;
+                    const jobCanUse = !item.allowedJobs || item.allowedJobs.includes(player.job);
+                    
+                    const jobText = getJobText(item);
+
                     return (
                       <div key={item.id} className="flex flex-col justify-between rounded border border-gray-300 p-3">
-                        {/* 내용 영역 */}
-												<div>
+                        <div>
                           <div className="text-sm font-bold">
                             {item.name}
                             {(() => {
@@ -80,27 +147,27 @@ const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEqui
                               return lvl > 0 ? ` [${lvl}강]` : '';
                             })()}
                           </div>
-                          <div className="text-xs">ATK +{item.value}</div>
+                          <div className="text-xs">ATK +{item.value} <span className="text-red-500">{jobText}</span></div>
                         </div>
 
-												{/* 버튼 영역 */}
                         <div className="mt-2 flex gap-2"> 
                           {!owned ? (
                             <button
                               onClick={() => onBuyItem(item)}
-                              disabled={!canAfford}
+                              disabled={!canAfford || !jobCanUse}
                               className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs enabled:hover:bg-blue-700 enabled:hover:text-white disabled:opacity-50"
                             >
-															구매 ({item.price} G)
+															{!jobCanUse ? '직업 제한' : `구매 (${item.price} G)`}
 														</button>
                           ) : equipped ? (
                             <button disabled className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs opacity-60">장착중</button>
                           ) : (
                             <button 
 															onClick={() => onEquipWeapon && onEquipWeapon(item.id)} 
-															className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs hover:bg-emerald-600 hover:text-white"
+                              disabled={!jobCanUse}
+															className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs hover:bg-emerald-600 hover:text-white disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-gray-800"
 														>
-															장착
+															{!jobCanUse ? '직업 제한' : '장착'}
 														</button>
                           )}
                         </div>
@@ -114,14 +181,17 @@ const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEqui
             {activeTab === 'armor' && (
               <section>
                 <div className="grid grid-cols-2 gap-3">
-                  {shopLists.armors.map(item => {
+                  {filteredArmors.map(item => {
                     const owned = (player.ownedArmorIds || []).includes(item.id);
                     const equipped = player.armor?.id === item.id;
                     const canAfford = player.money >= item.price;
+                    const jobCanUse = !item.allowedJobs || item.allowedJobs.includes(player.job);
+
+                    const jobText = getJobText(item);
+
                     return (
                       <div key={item.id} className="flex flex-col justify-between rounded border border-gray-300 p-3">
-                         {/* 내용 영역 */}
-												<div>
+                         <div>
                           <div className="text-sm font-bold">
                             {item.name}
                             {(() => {
@@ -129,27 +199,27 @@ const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEqui
                               return lvl > 0 ? ` [${lvl}강]` : '';
                             })()}
                           </div>
-                          <div className="text-xs">DEF +{item.value}</div>
+                          <div className="text-xs">DEF +{item.value} <span className="text-red-500">{jobText}</span></div>
                         </div>
 
-												{/* 버튼 영역 */}
                         <div className="mt-2 flex gap-2"> 
                           {!owned ? (
                             <button
                               onClick={() => onBuyItem(item)}
-                              disabled={!canAfford}
+                              disabled={!canAfford || !jobCanUse}
                               className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs enabled:hover:bg-blue-700 enabled:hover:text-white disabled:opacity-50"
                             >
-															구매 ({item.price} G)
+															{!jobCanUse ? '직업 제한' : `구매 (${item.price} G)`}
 														</button>
                           ) : equipped ? (
                             <button disabled className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs opacity-60">장착중</button>
                           ) : (
                             <button 
 															onClick={() => onEquipArmor && onEquipArmor(item.id)} 
-															className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs hover:bg-emerald-600 hover:text-white"
+                              disabled={!jobCanUse}
+															className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs hover:bg-emerald-600 hover:text-white disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-gray-800"
 														>
-															장착
+															{!jobCanUse ? '직업 제한' : '장착'}
 														</button>
                           )}
                         </div>
@@ -160,6 +230,7 @@ const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEqui
               </section>
             )}
             
+            {/* 펫 탭 */}
             {activeTab === 'pet' && (
               <section>
                 <div className="grid grid-cols-2 gap-3">
@@ -170,8 +241,7 @@ const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEqui
                     const canAfford = player.money >= price;
                     return (
                       <div key={pet.id} className="flex flex-col justify-between rounded border border-gray-300 p-3">
-                        {/* 내용 영역 */}
-												<div> 
+                        <div> 
                           <div className="text-sm font-bold">{pet.icon} {pet.name}
                             {(() => {
                               const lvl = (player.petEnhanceLevels || {})[pet.id] || 0;
@@ -181,7 +251,6 @@ const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEqui
                           <div className="text-xs text-gray-600">{pet.description}</div>
                         </div>
 
-												{/* 버튼 영역 */}
                         <div className="mt-2 flex gap-2"> 
                           {!owned ? (
                             <button onClick={() => onBuyPet(pet.id)} disabled={!canAfford} className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs enabled:hover:bg-blue-700 enabled:hover:text-white disabled:opacity-50">구매 ({price} G)</button>

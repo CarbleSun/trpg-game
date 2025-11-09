@@ -95,10 +95,10 @@ const ActionMenu = ({
             스킬
           </ActionButton>
           <ActionButton onClick={onOpenPetEnhance} disabled={isProcessing} hotkey="P">
-            펫강화소
+            펫 강화소
           </ActionButton>
           <ActionButton onClick={onOpenWeaponEnhance} disabled={isProcessing} hotkey="W">
-            무기강화소
+            무기 강화소
           </ActionButton>
         </div>
       )}
