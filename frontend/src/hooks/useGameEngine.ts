@@ -9,8 +9,10 @@ import type {
   BattleResult,
 	EquipmentItem, // 장비 구매 기능 
   Dungeon,
+  BossStats,
+  SkillKey,
 } from '../game/types';
-import { ctrl, monsterList, skills as allSkills, dungeons, petShopList } from '../game/constants';
+import { ctrl, monsterList, skills as allSkills, dungeons, petShopList, bossDungeons, createBoss } from '../game/constants';
 import { weaponShopList, armorShopList } from '../game/shopItems';
 import { getRandom } from '../game/utils';
 
@@ -287,6 +289,7 @@ const checkLevelUp = (player: PlayerStats): { newPlayer: PlayerStats, logs: Omit
 export const useGameEngine = () => {
   const [player, setPlayer] = useState<PlayerStats | null>(null);
   const [monster, setMonster] = useState<CharacterStats | null>(null);
+  const [boss, setBoss] = useState<BossStats | null>(null); // 보스 상태
   const [logMessages, setLogMessages] = useState<LogMessage[]>([]);
   const [gameState, setGameState] = useState<GameState>('setup');
   const [isPlayerTurn, setIsPlayerTurn] = useState(true);
@@ -295,7 +298,18 @@ export const useGameEngine = () => {
 	const [recoveryCharges, setRecoveryCharges] = useState(5); // 회복 횟수 추가
   const [isSkillsOpen, setIsSkillsOpen] = useState(false); // 스킬 창 모달
   const [currentDungeonId, setCurrentDungeonId] = useState<string | null>(null); // 현재 던전 ID
+  const [currentBossDungeonId, setCurrentBossDungeonId] = useState<string | null>(null); // 현재 보스 던전 ID
   const [showBattleChoice, setShowBattleChoice] = useState(false); // 전투 후 선택 화면 표시 여부
+  const [bossCooldowns, setBossCooldowns] = useState<Record<string, number>>(() => {
+    // localStorage에서 쿨타임 불러오기
+    const stored = localStorage.getItem('bossCooldowns');
+    return stored ? JSON.parse(stored) : {};
+  });
+  const [dungeonKillCounts, setDungeonKillCounts] = useState<Record<string, number>>(() => {
+    // localStorage에서 던전별 처치 횟수 불러오기
+    const stored = localStorage.getItem('dungeonKillCounts');
+    return stored ? JSON.parse(stored) : {};
+  });
 
   /**
    * 로그 추가 유틸리티
@@ -521,7 +535,7 @@ export const useGameEngine = () => {
 
       if (result.isBattleOver) {
         // 플레이어 패배
-        handleBattleEnd('defeat', updatedPlayer);
+        handleBattleEnd('defeat', updatedPlayer, currentMonster);
       } else {
         // 플레이어 턴으로 전환
         addLog(`--- 플레이어의 턴 ---`, 'normal');
@@ -542,6 +556,296 @@ export const useGameEngine = () => {
   };
 
   /**
+   * 보스 턴 실행 (스킬 사용 가능)
+   */
+  const runBossTurn = (currentPlayer: PlayerStats, currentBoss: BossStats) => {
+    setIsProcessing(true);
+    
+    setTimeout(() => {
+      addLog(`--- 보스의 턴 ---`, 'normal');
+
+      // 보스 기절 체크
+      if ((currentPlayer.monsterStunnedTurns || 0) > 0) {
+        addLog(`💫 보스가 기절하여 행동할 수 없다!`, 'fail');
+        const nextPlayer = { ...currentPlayer, monsterStunnedTurns: (currentPlayer.monsterStunnedTurns || 0) - 1 };
+        addLog(`--- 플레이어의 턴 ---`, 'normal');
+        const ticked = tickSkills(nextPlayer);
+        const afterPet = applyPetStartOfTurn(ticked, currentBoss);
+        setPlayer(afterPet.player);
+        setBoss(afterPet.monster as BossStats);
+        if (afterPet.monster && afterPet.monster.hp <= 0) {
+          handleBossBattleEnd('victory', afterPet.player, afterPet.monster as BossStats);
+          setIsProcessing(false);
+          return;
+        }
+        setIsPlayerTurn(true);
+        setIsProcessing(false);
+        return;
+      }
+
+      // 보스 버프 틱 (쿨다운 감소)
+      let updatedBoss = { ...currentBoss };
+      const nextBuffs = (updatedBoss.activeBuffs || [])
+        .map(b => ({ ...b, remainingTurns: b.remainingTurns - 1 }))
+        .filter(b => b.remainingTurns > 0);
+      const nextCooldowns: Partial<Record<SkillKey, number>> = { ...(updatedBoss.skillCooldowns || {}) };
+      Object.keys(nextCooldowns).forEach(k => {
+        const key = k as SkillKey;
+        if (typeof nextCooldowns[key] === 'number' && (nextCooldowns[key] as number) > 0) {
+          nextCooldowns[key] = Math.max(0, (nextCooldowns[key] as number) - 1);
+        }
+      });
+      updatedBoss = { ...updatedBoss, activeBuffs: nextBuffs, skillCooldowns: nextCooldowns };
+
+      // 보스 스킬 사용 결정 (30% 확률로 스킬 사용, 쿨다운이 없으면)
+      const availableSkills = updatedBoss.skills.filter(skillKey => {
+        const cd = updatedBoss.skillCooldowns?.[skillKey] || 0;
+        return cd === 0;
+      });
+
+      if (availableSkills.length > 0 && getRandom(1, 100) <= 30) {
+        const skillKey = availableSkills[getRandom(0, availableSkills.length - 1)];
+        const skill = allSkills.find(s => s.key === skillKey);
+        if (skill) {
+          addLog(`🔥 ${currentBoss.name}이(가) "${skill.name}" 스킬을 사용했다!`, 'cri');
+          
+          if (skill.kind === 'buff') {
+            const duration = skill.duration || 1;
+            const bonuses = skill.bonuses || {};
+            const extra: any = {};
+            if (skill.effect?.type === 'evade') extra.evadeAll = true;
+            if (skill.effect?.type === 'reflect') extra.reflectPercent = skill.effect.value;
+            if (skill.effect?.type === 'barrier') extra.barrier = true;
+            if (skill.effect?.type === 'charge') extra.chargeAttackMultiplier = skill.effect.value;
+            if (skill.effect?.type === 'counter') extra.counterDamage = skill.effect.value;
+            if (skill.effect?.type === 'lifesteal') extra.lifeStealPercent = skill.effect.value;
+            if (skill.effect?.type === 'weaken') extra.weakenPercent = skill.effect.value;
+            if (skill.effect?.type === 'multiStrike') extra.multiStrikeNext = true;
+            if (skill.effect?.type === 'trueStrike') extra.trueStrikeNext = true;
+            
+            updatedBoss = {
+              ...updatedBoss,
+              activeBuffs: [...(updatedBoss.activeBuffs || []), { key: skillKey, remainingTurns: duration, bonuses, ...extra }],
+              skillCooldowns: { ...nextCooldowns, [skillKey]: skill.cooldown },
+            };
+          } else if (skill.effect?.type === 'stun') {
+            // 보스가 플레이어를 스턴 (실제로는 약화 효과)
+            const turns = Math.max(1, Math.floor(skill.effect.value));
+            addLog(`🌀 ${currentBoss.name}이(가) 당신을 ${turns}턴 동안 약화시켰다!`, 'cri');
+            // 플레이어 약화 효과는 activeBuffs로 처리하지 않고, 공격력 감소로 처리
+            updatedBoss = {
+              ...updatedBoss,
+              skillCooldowns: { ...nextCooldowns, [skillKey]: skill.cooldown },
+            };
+          }
+        }
+      }
+
+      // 특수 방어 버프 처리
+      const barrierIdx = (currentPlayer.activeBuffs || []).findIndex(b => b.barrier);
+      if (barrierIdx >= 0) {
+        addLog(`🛡 배리어가 보스의 공격을 완전히 막았다!`, 'normal');
+        const nextBuffs = [...(currentPlayer.activeBuffs || [])];
+        nextBuffs.splice(barrierIdx, 1);
+        const updatedAfterBarrier = { ...currentPlayer, activeBuffs: nextBuffs };
+        setPlayer(updatedAfterBarrier);
+        setBoss(updatedBoss);
+        addLog(`--- 플레이어의 턴 ---`, 'normal');
+        const ticked = tickSkills(updatedAfterBarrier);
+        const afterPet = applyPetStartOfTurn(ticked, updatedBoss);
+        setPlayer(afterPet.player);
+        setBoss(afterPet.monster as BossStats);
+        if (afterPet.monster && afterPet.monster.hp <= 0) {
+          handleBossBattleEnd('victory', afterPet.player, afterPet.monster as BossStats);
+          setIsProcessing(false);
+          return;
+        }
+        setIsPlayerTurn(true);
+        setIsProcessing(false);
+        return;
+      }
+
+      const hasEvade = (currentPlayer.activeBuffs || []).some(b => b.evadeAll);
+      if (hasEvade) {
+        addLog(`🍃 그림자처럼 보스의 공격을 모두 회피했다!`, 'fail');
+        setBoss(updatedBoss);
+        addLog(`--- 플레이어의 턴 ---`, 'normal');
+        const ticked = tickSkills(currentPlayer);
+        const afterPet = applyPetStartOfTurn(ticked, updatedBoss);
+        setPlayer(afterPet.player);
+        setBoss(afterPet.monster as BossStats);
+        if (afterPet.monster && afterPet.monster.hp <= 0) {
+          handleBossBattleEnd('victory', afterPet.player, afterPet.monster as BossStats);
+          setIsProcessing(false);
+          return;
+        }
+        setIsPlayerTurn(true);
+        setIsProcessing(false);
+        return;
+      }
+
+      // 약화 적용
+      const weaken = (currentPlayer.activeBuffs || []).find(b => (b.weakenPercent || 0) > 0)?.weakenPercent || 0;
+      const attackerForTurn = weaken > 0 ? { ...updatedBoss, atk: Math.max(1, Math.floor(updatedBoss.atk * (1 - weaken))) } : updatedBoss;
+
+      // 보스 버프 적용 (차지, 트루 스트라이크 등)
+      let finalBossStats = attackerForTurn;
+      const chargeIdx = (updatedBoss.activeBuffs || []).findIndex(b => (b.chargeAttackMultiplier || 0) > 0);
+      if (chargeIdx >= 0) {
+        const mult = (updatedBoss.activeBuffs || [])[chargeIdx].chargeAttackMultiplier || 0;
+        finalBossStats = { ...finalBossStats, atk: Math.floor(finalBossStats.atk * (1 + mult)) };
+        const nextBuffs = [...(updatedBoss.activeBuffs || [])];
+        nextBuffs.splice(chargeIdx, 1);
+        updatedBoss = { ...updatedBoss, activeBuffs: nextBuffs };
+        addLog(`⚡️ 보스가 차지 에너지를 방출한다!`, 'cri');
+      }
+
+      const trueIdx = (updatedBoss.activeBuffs || []).findIndex(b => b.trueStrikeNext);
+      let defenderStats = getEffectivePlayerStats(currentPlayer);
+      if (trueIdx >= 0) {
+        defenderStats = { ...defenderStats, def: 0 };
+        const nextBuffs = [...(updatedBoss.activeBuffs || [])];
+        nextBuffs.splice(trueIdx, 1);
+        updatedBoss = { ...updatedBoss, activeBuffs: nextBuffs };
+        addLog(`🎯 보스가 방어를 꿰뚫는 일격을 날린다!`, 'cri');
+      }
+
+      // 보스가 플레이어 공격
+      const result = calculateAttack(finalBossStats, defenderStats);
+      addLogs(result.logs);
+
+      let updatedPlayer = { ...currentPlayer, hp: result.defender.hp };
+      setPlayer(updatedPlayer);
+      setBoss(updatedBoss);
+
+      // 반사/카운터 처리
+      const reflect = (currentPlayer.activeBuffs || []).find(b => (b.reflectPercent || 0) > 0)?.reflectPercent || 0;
+      const counter = (currentPlayer.activeBuffs || []).find(b => (b.counterDamage || 0) > 0)?.counterDamage || 0;
+      let updatedBossAfterReflect = updatedBoss;
+      const last = result.logs[result.logs.length - 1];
+      const match = last?.msg.match(/(\d+)의 데미지를/);
+      const dealt = match ? parseInt(match[1], 10) : 0;
+      if (reflect > 0 && dealt > 0) {
+        const reflectDmg = Math.max(1, Math.floor(dealt * reflect));
+        updatedBossAfterReflect = { ...updatedBoss, hp: Math.max(0, updatedBoss.hp - reflectDmg) };
+        addLog(`🔁 가시 갑옷 반사! ${reflectDmg} 피해 (보스 HP: ${updatedBossAfterReflect.hp})`, 'atk');
+      }
+      if (counter > 0 && dealt > 0) {
+        updatedBossAfterReflect = { ...updatedBossAfterReflect, hp: Math.max(0, updatedBossAfterReflect.hp - counter) };
+        addLog(`🔪 반격 성공! ${counter} 피해 (보스 HP: ${updatedBossAfterReflect.hp})`, 'atk');
+      }
+      setBoss(updatedBossAfterReflect);
+
+      // 멀티 스트라이크
+      const msIdx = (updatedBoss.activeBuffs || []).findIndex(b => b.multiStrikeNext);
+      let secondResult: (BattleResult & { didHit: boolean }) | null = null;
+      if (msIdx >= 0 && !result.isBattleOver) {
+        const nextBuffs = [...(updatedBoss.activeBuffs || [])];
+        nextBuffs.splice(msIdx, 1);
+        setBoss({ ...updatedBossAfterReflect, activeBuffs: nextBuffs });
+        addLog(`🔪 보스의 연속 타격!`, 'atk');
+        const secondAttacker = { ...finalBossStats, atk: Math.floor(finalBossStats.atk * 0.6) };
+        secondResult = calculateAttack(secondAttacker, defenderStats);
+        addLogs(secondResult.logs);
+        updatedPlayer = { ...updatedPlayer, hp: secondResult.defender.hp };
+        setPlayer(updatedPlayer);
+        setBoss({ ...updatedBossAfterReflect, hp: Math.max(0, updatedBossAfterReflect.hp) });
+      }
+
+      // 라이프스틸
+      const ls = (updatedBoss.activeBuffs || []).find(b => (b.lifeStealPercent || 0) > 0)?.lifeStealPercent || 0;
+      if (ls > 0 && dealt > 0) {
+        const heal = Math.max(1, Math.floor(dealt * ls));
+        const healed = Math.min(updatedBossAfterReflect.maxHp, updatedBossAfterReflect.hp + heal);
+        setBoss({ ...updatedBossAfterReflect, hp: healed });
+        addLog(`🩸 보스가 흡혈 효과로 HP +${heal} 회복!`, 'normal');
+      }
+
+      if (result.isBattleOver || (msIdx >= 0 && !result.isBattleOver && secondResult?.isBattleOver)) {
+        handleBossBattleEnd('defeat', updatedPlayer);
+      } else {
+        addLog(`--- 플레이어의 턴 ---`, 'normal');
+        const ticked = tickSkills(updatedPlayer);
+        const afterPet = applyPetStartOfTurn(ticked, updatedBossAfterReflect);
+        setPlayer(afterPet.player);
+        setBoss(afterPet.monster as BossStats);
+        if (afterPet.monster && afterPet.monster.hp <= 0) {
+          handleBossBattleEnd('victory', afterPet.player, afterPet.monster as BossStats);
+          setIsProcessing(false);
+          return;
+        }
+        setIsPlayerTurn(true);
+        setIsProcessing(false);
+      }
+    }, 1500);
+  };
+
+  /**
+   * 보스 전투 종료 처리
+   */
+  const handleBossBattleEnd = (
+    type: 'victory' | 'defeat' | 'escape',
+    updatedPlayer: PlayerStats,
+    targetBoss?: BossStats,
+  ) => {
+    setConsecutiveMisses(0);
+    setRecoveryCharges(5);
+    let playerAfterBattle = { ...updatedPlayer };
+    const logs: Omit<LogMessage, 'id'>[] = [];
+
+    if (type === 'victory' && targetBoss && currentBossDungeonId) {
+      logs.push({ msg: `🎉 보스 전투에서 승리했다! ${targetBoss.name}을(를) 물리쳤다.`, type: 'vic' });
+      playerAfterBattle.vicCount += 1;
+
+      // 보스 보상 (일반 몬스터보다 훨씬 많음)
+      const gainedExp = getRandom(100, 300) + (targetBoss.level * 200);
+      const gainedGold = getRandom(200, 500) + (targetBoss.level * 100);
+      
+      playerAfterBattle.exp += gainedExp;
+      playerAfterBattle.money += gainedGold;
+      logs.push({ msg: `👑 ${gainedExp} Exp를 획득했다.`, type: 'gainExp' });
+      logs.push({ msg: `💰 ${gainedGold} Gold를 획득했다.`, type: 'gainMoney' });
+
+      // 레벨업 체크
+      const levelUpResult = checkLevelUp(playerAfterBattle);
+      playerAfterBattle = levelUpResult.newPlayer;
+      logs.push(...levelUpResult.logs);
+
+      // 보스 던전 쿨타임 설정
+      const newCooldowns = {
+        ...bossCooldowns,
+        [currentBossDungeonId]: Date.now() + 60 * 60 * 1000, // 1시간
+      };
+      setBossCooldowns(newCooldowns);
+      localStorage.setItem('bossCooldowns', JSON.stringify(newCooldowns));
+    } 
+    else if (type === 'defeat') {
+      logs.push({ msg: `☠️ 보스 전투에서 패배했다...`, type: 'def' });
+      playerAfterBattle.defCount += 1;
+      playerAfterBattle.exp = Math.floor(playerAfterBattle.exp * 0.7);
+      playerAfterBattle.hp = playerAfterBattle.maxHp;
+      logs.push({ msg: `😥 잠시 쉬고 일어나 체력을 모두 회복했다.`, type: 'normal' });
+    }
+    else if (type === 'escape') {
+      logs.push({ msg: `💨 보스 전투에서 도망쳤다...`, type: 'fail' });
+    }
+
+    addLogs(logs);
+    setPlayer(playerAfterBattle);
+    setBoss(null);
+    setMonster(null);
+    setIsProcessing(false);
+    setIsPlayerTurn(true);
+    
+    if (type === 'victory') {
+      setShowBattleChoice(true);
+    } else {
+      setGameState('dungeon');
+      setCurrentBossDungeonId(null);
+    }
+  };
+
+  /**
    * 전투 종료 처리 (승리/패배/도망)
    */
   const handleBattleEnd = (
@@ -555,12 +859,41 @@ export const useGameEngine = () => {
     const logs: Omit<LogMessage, 'id'>[] = [];
 
     if (type === 'victory' && targetMonster) {
+      const isNamedMonster = targetMonster.name.includes('[네임드]');
+      
       logs.push({ msg: `🎉 전투에서 승리했다! ${targetMonster.name}을(를) 물리쳤다.`, type: 'vic' });
       playerAfterBattle.vicCount += 1;
 
-      // 보상 획득 (원본 공식)
-      const gainedExp = getRandom(5, 30) + (targetMonster.level * 60);
-      const gainedGold = getRandom(10, 50) + (targetMonster.level * 30);
+      // 던전별 처치 횟수 처리 (일반 던전인 경우에만)
+      if (currentDungeonId && !currentBossDungeonId) {
+        const newKillCounts = { ...dungeonKillCounts };
+        
+        if (isNamedMonster) {
+          // 네임드 몬스터 처치 시 처치 횟수 초기화
+          newKillCounts[currentDungeonId] = 0;
+          logs.push({ msg: `✨ 네임드 몬스터를 처치하여 처치 횟수가 초기화되었다.`, type: 'normal' });
+        } else {
+          // 일반 몬스터 처치 시 횟수 증가
+          newKillCounts[currentDungeonId] = (newKillCounts[currentDungeonId] || 0) + 1;
+          const killCount = newKillCounts[currentDungeonId];
+          logs.push({ msg: `📊 던전 처치 횟수: ${killCount}/5`, type: 'normal' });
+        }
+        
+        setDungeonKillCounts(newKillCounts);
+        localStorage.setItem('dungeonKillCounts', JSON.stringify(newKillCounts));
+      }
+
+      // 보상 획득 (네임드 몬스터는 약간 더 많은 보상)
+      let gainedExp: number;
+      let gainedGold: number;
+      
+      if (isNamedMonster) {
+        gainedExp = getRandom(30, 60) + (targetMonster.level * 90); // 일반보다 약간 많음
+        gainedGold = getRandom(30, 80) + (targetMonster.level * 50);
+      } else {
+        gainedExp = getRandom(5, 30) + (targetMonster.level * 60);
+        gainedGold = getRandom(10, 50) + (targetMonster.level * 30);
+      }
       
       playerAfterBattle.exp += gainedExp;
       playerAfterBattle.money += gainedGold;
@@ -575,6 +908,19 @@ export const useGameEngine = () => {
     else if (type === 'defeat') {
       logs.push({ msg: `☠️ 전투에서 패배했다...`, type: 'def' });
       playerAfterBattle.defCount += 1;
+      
+      // 네임드 몬스터에게 패배 시 처치 횟수 초기화
+      if (targetMonster && currentDungeonId && !currentBossDungeonId) {
+        const isNamedMonster = targetMonster.name.includes('[네임드]');
+        if (isNamedMonster) {
+          const newKillCounts = { ...dungeonKillCounts };
+          newKillCounts[currentDungeonId] = 0;
+          setDungeonKillCounts(newKillCounts);
+          localStorage.setItem('dungeonKillCounts', JSON.stringify(newKillCounts));
+          logs.push({ msg: `😢 네임드 몬스터에게 패배하여 처치 횟수가 초기화되었다.`, type: 'normal' });
+        }
+      }
+      
       // 경험치 30% 감소 (원본)
       playerAfterBattle.exp = Math.floor(playerAfterBattle.exp * 0.7);
       // HP 전체 회복 (원본)
@@ -635,10 +981,68 @@ export const useGameEngine = () => {
     }
     
     setCurrentDungeonId(dungeonId);
+    setCurrentBossDungeonId(null); // 일반 던전이면 보스 던전 ID 초기화
     setGameState('dungeon');
     addLog(`🗺️ ${dungeon.icon} ${dungeon.name}에 입장했습니다.`, 'normal');
     // 던전 입장 직후 바로 탐색 시작
     handleNextDungeon(dungeon);
+  };
+
+  // 보스 던전 선택 핸들러
+  const handleSelectBossDungeon = (bossDungeonId: string) => {
+    if (!player) return;
+    
+    const bossDungeon = bossDungeons.find(b => b.id === bossDungeonId);
+    if (!bossDungeon) return;
+    
+    if (player.level < bossDungeon.requiredLevel) {
+      addLog(`🚫 레벨이 부족합니다. 필요 레벨: ${bossDungeon.requiredLevel}`, 'fail');
+      return;
+    }
+    
+    // 쿨타임 체크
+    const cooldown = bossCooldowns[bossDungeonId] || 0;
+    if (cooldown > Date.now()) {
+      const remaining = Math.ceil((cooldown - Date.now()) / 1000 / 60);
+      const hours = Math.floor(remaining / 60);
+      const minutes = remaining % 60;
+      addLog(`⏰ 보스 던전 쿨타임이 남아있습니다. (${hours}시간 ${minutes}분)`, 'fail');
+      return;
+    }
+    
+    setCurrentBossDungeonId(bossDungeonId);
+    setCurrentDungeonId(null); // 보스 던전이면 일반 던전 ID 초기화
+    setGameState('dungeon');
+    addLog(`👹 ${bossDungeon.icon} ${bossDungeon.name}에 입장했습니다.`, 'normal');
+    
+    // 보스 생성 및 전투 시작
+    const newBoss = createBoss(bossDungeon.bossLevel);
+    setBoss(newBoss);
+    setMonster(null); // 일반 몬스터는 null
+    setGameState('battle');
+    addLog(`💀 ${newBoss.name}이(가) 나타났다...!`, 'appear');
+    
+    setRecoveryCharges(5); // 전투 시작 시 회복 횟수 초기화
+    
+    // 선공 결정
+    if (getRandom(1, 100) <= 50) {
+      addLog(`😁 선빵필승! ${player.name}은(는) 먼저 공격할 수 있다.`);
+      const ticked = tickSkills(player);
+      const afterPet = applyPetStartOfTurn(ticked, newBoss);
+      setPlayer(afterPet.player);
+      setBoss(afterPet.monster as BossStats);
+      if (afterPet.monster && afterPet.monster.hp <= 0) {
+        handleBossBattleEnd('victory', afterPet.player, afterPet.monster as BossStats);
+        setIsProcessing(false);
+        return;
+      }
+      setIsPlayerTurn(true);
+      setIsProcessing(false);
+    } else {
+      addLog(`😰 칫! 기습인가? ${newBoss.name}이(가) 먼저 공격해 올 것이다.`);
+      setIsPlayerTurn(false);
+      runBossTurn(player, newBoss); // 보스가 즉시 턴 실행
+    }
   };
 
   const handleOpenDungeonSelect = () => {
@@ -650,24 +1054,55 @@ export const useGameEngine = () => {
     setGameState('dungeon');
   };
 
+  const handleOpenBossSelect = () => {
+    if (isProcessing) return;
+    setGameState('bossSelect');
+  };
+
+  const handleCloseBossSelect = () => {
+    setGameState('dungeon');
+  };
+
   const handleNextDungeon = (selectedDungeon?: Dungeon) => {
     if (isProcessing || !player) return;
     
     const dungeon = selectedDungeon || (currentDungeonId ? dungeons.find(d => d.id === currentDungeonId) : undefined);
     if (!dungeon) return;
     
+    // 던전별 처치 횟수 확인 (일반 던전인 경우에만)
+    const killCount = currentDungeonId ? (dungeonKillCounts[currentDungeonId] || 0) : 0;
+    const shouldSpawnNamedMonster = currentDungeonId && !currentBossDungeonId && killCount > 0 && killCount % 5 === 0;
+    
     addLog("🧭 던전 안을 향해 들어가본다...");
     setIsProcessing(true); // 몬스터 등장 딜레이
 
     setTimeout(() => {
-      const newMonster = makeMonster(player.level, dungeon.monsterLevelOffset);
+      let newMonster: CharacterStats;
+      
+      if (shouldSpawnNamedMonster) {
+        // 네임드 몬스터 등장 (일반 몬스터보다 2배 강함)
+        const baseMonster = makeMonster(player.level, dungeon.monsterLevelOffset);
+        newMonster = {
+          ...baseMonster,
+          name: `[네임드] ${baseMonster.name}`,
+          hp: baseMonster.hp * 2, // HP 2배
+          maxHp: baseMonster.maxHp * 2,
+          atk: baseMonster.atk * 2, // ATK 2배
+          def: baseMonster.def * 2, // DEF 2배
+          luk: baseMonster.luk * 2, // LUK 2배
+        };
+        addLog(`💀 네임드 몬스터 ${newMonster.name}이(가) 나타났다...!`, 'appear');
+      } else {
+        // 일반 몬스터 등장
+        newMonster = makeMonster(player.level, dungeon.monsterLevelOffset);
+        addLog(`👻 ${newMonster.name}이(가) 나타났다...!`, 'appear');
+      }
+      
       setMonster(newMonster);
       setGameState('battle');
-      addLog(`👻 ${newMonster.name}이(가) 나타났다...!`, 'appear');
+      setRecoveryCharges(5); // 전투 시작 시 회복 횟수 초기화
 
-			setRecoveryCharges(5); // 전투 시작 시 회복 횟수 초기화
-
-      // 선공 결정 (원본)
+      // 선공 결정
       if (getRandom(1, 100) <= 50) {
         addLog(`😁 선빵필승! ${player.name}은(는) 먼저 공격할 수 있다.`);
         // 턴 시작 시 스킬 지속/쿨다운 감소 + 펫 동작
@@ -709,7 +1144,9 @@ export const useGameEngine = () => {
 
   // --- 3. 전투 액션 ---
   const handleAttack = () => {
-    if (isProcessing || !isPlayerTurn || !player || !monster) return;
+    if (isProcessing || !isPlayerTurn || !player) return;
+    const currentEnemy = boss || monster;
+    if (!currentEnemy) return;
 
     setIsPlayerTurn(false); // 즉시 턴 종료
     
@@ -733,9 +1170,9 @@ export const useGameEngine = () => {
     }
     // true strike: 방어 무시
     const trueIdx = (player.activeBuffs || []).findIndex(b => b.trueStrikeNext);
-    let defenderStats = monster;
+    let defenderStats = currentEnemy;
     if (trueIdx >= 0) {
-      defenderStats = { ...monster, def: 0 };
+      defenderStats = { ...currentEnemy, def: 0 };
       const nextBuffs = [...(player.activeBuffs || [])];
       nextBuffs.splice(trueIdx, 1);
       setPlayer({ ...player, activeBuffs: nextBuffs });
@@ -743,7 +1180,11 @@ export const useGameEngine = () => {
     }
     let result = calculateAttack(chargedStats, defenderStats, isBonusAttack);
     addLogs(result.logs);
-    setMonster(result.defender);
+    if (boss) {
+      setBoss(result.defender as BossStats);
+    } else {
+      setMonster(result.defender);
+    }
 
     // 3. 결과에 따라 빗나감 카운터 업데이트
     if (result.didHit) {
@@ -779,7 +1220,11 @@ export const useGameEngine = () => {
       const secondAttacker = { ...chargedStats, atk: Math.floor(chargedStats.atk * 0.6) };
       result = calculateAttack(secondAttacker, result.defender, false);
       addLogs(result.logs);
-      setMonster(result.defender);
+      if (boss) {
+        setBoss(result.defender as BossStats);
+      } else {
+        setMonster(result.defender);
+      }
       // 라이프스틸 2타 적용
       if (ls > 0) {
         const last2 = result.logs[result.logs.length - 1];
@@ -794,28 +1239,44 @@ export const useGameEngine = () => {
     }
 
     if (result.isBattleOver) {
-      // 몬스터 승리 (카운터는 handleBattleEnd에서 초기화됨)
-      handleBattleEnd('victory', { ...player }, result.defender);
+      // 적 승리 (카운터는 handleBattleEnd에서 초기화됨)
+      if (boss) {
+        handleBossBattleEnd('victory', { ...player }, result.defender as BossStats);
+      } else {
+        handleBattleEnd('victory', { ...player }, result.defender);
+      }
     } else {
-      // 몬스터 턴 진행
-      runMonsterTurn({ ...player }, result.defender);
+      // 적 턴 진행
+      if (boss) {
+        runBossTurn({ ...player }, result.defender as BossStats);
+      } else {
+        runMonsterTurn({ ...player }, result.defender);
+      }
     }
   };
   
   const handleDefend = () => {
-    if (isProcessing || !isPlayerTurn || !player || !monster) return;
+    if (isProcessing || !isPlayerTurn || !player) return;
+    const currentEnemy = boss || monster;
+    if (!currentEnemy) return;
 
     setIsPlayerTurn(false); // 턴 종료
     const defendedPlayer = { ...player, isDefending: true };
     setPlayer(defendedPlayer);
     addLog(`🛡 ${player.name}이(가) 방어 태세를 취한다.`, 'normal');
 
-    // 몬스터 턴 진행
-    runMonsterTurn(defendedPlayer, monster);
+    // 적 턴 진행
+    if (boss) {
+      runBossTurn(defendedPlayer, currentEnemy as BossStats);
+    } else {
+      runMonsterTurn(defendedPlayer, currentEnemy);
+    }
   };
   
   const handleRecovery = () => {
-    if (isProcessing || !isPlayerTurn || !player || !monster) return;
+    if (isProcessing || !isPlayerTurn || !player) return;
+    const currentEnemy = boss || monster;
+    if (!currentEnemy) return;
 
     // 횟수 체크
     if (recoveryCharges <= 0) {
@@ -845,8 +1306,12 @@ export const useGameEngine = () => {
     const recoveredPlayer = { ...player, hp: newHp };
     setPlayer(recoveredPlayer);
 
-    // 몬스터 턴 진행
-    runMonsterTurn(recoveredPlayer, monster);
+    // 적 턴 진행
+    if (boss) {
+      runBossTurn(recoveredPlayer, currentEnemy as BossStats);
+    } else {
+      runMonsterTurn(recoveredPlayer, currentEnemy);
+    }
   };
 
   // 스킬 지속/쿨다운 틱 (플레이어 턴 시작 시)
@@ -866,7 +1331,9 @@ export const useGameEngine = () => {
 
   // 전투 중 스킬 사용
   const handleUseSkill = (key: typeof allSkills[number]['key']) => {
-    if (isProcessing || !isPlayerTurn || !player || !monster) return;
+    if (isProcessing || !isPlayerTurn || !player) return;
+    const currentEnemy = boss || monster;
+    if (!currentEnemy) return;
     if (!player.skills.includes(key)) {
       addLog('🚫 습득하지 않은 스킬입니다.', 'fail');
       return;
@@ -908,8 +1375,12 @@ export const useGameEngine = () => {
       setPlayer(updatedPlayer);
       const upgradeText = upgradeLevel > 0 ? ` (업그레이드 Lv.${upgradeLevel})` : '';
       addLog(`🛡 스킬 사용: ${skill.name} (지속 ${duration}턴)${upgradeText}`, 'normal');
-      // 몬스터 턴 진행
-      runMonsterTurn(updatedPlayer, monster);
+      // 적 턴 진행
+      if (boss) {
+        runBossTurn(updatedPlayer, currentEnemy as BossStats);
+      } else {
+        runMonsterTurn(updatedPlayer, currentEnemy);
+      }
       return;
     }
     if (skill.effect?.type === 'timeStop') {
@@ -930,8 +1401,12 @@ export const useGameEngine = () => {
       setPlayer({ ...updated, skillCooldowns: { ...(player.skillCooldowns || {}), [key]: skill.cooldown } });
       const upgradeText = upgradeLevel > 0 ? ` (업그레이드 Lv.${upgradeLevel})` : '';
       addLog(`🌀 적이 ${turns}턴 동안 기절했다!${upgradeText}`, 'cri');
-      // 스턴은 사용으로 행동 소모되고, 다음 몬스터 턴에 적용되어 스킵됨
-      runMonsterTurn(updated, monster);
+      // 스턴은 사용으로 행동 소모되고, 다음 적 턴에 적용되어 스킵됨
+      if (boss) {
+        runBossTurn(updated, currentEnemy as BossStats);
+      } else {
+        runMonsterTurn(updated, currentEnemy);
+      }
       return;
     }
 
@@ -943,25 +1418,39 @@ export const useGameEngine = () => {
     // 기본 공격 계산
     const result = calculateAttack(
       { ...effectivePlayer, atk: Math.floor(effectivePlayer.atk * (1 + upgradedMultiplier)) },
-      monster,
+      currentEnemy,
       !!skill.guaranteedCrit,
     );
     const upgradeText = upgradeLevel > 0 ? ` (업그레이드 Lv.${upgradeLevel})` : '';
     addLogs([{ msg: `🔥 스킬 사용: ${skill.name}${upgradeText}`, type: 'cri' }, ...result.logs]);
-    setMonster(result.defender);
+    if (boss) {
+      setBoss(result.defender as BossStats);
+    } else {
+      setMonster(result.defender);
+    }
 
     // 쿨다운 부여
     setPlayer(prev => prev ? { ...prev, skillCooldowns: { ...(prev.skillCooldowns || {}), [key]: skill.cooldown } } : prev);
 
     if (result.isBattleOver) {
-      handleBattleEnd('victory', { ...player }, result.defender);
+      if (boss) {
+        handleBossBattleEnd('victory', { ...player }, result.defender as BossStats);
+      } else {
+        handleBattleEnd('victory', { ...player }, result.defender);
+      }
     } else {
-      runMonsterTurn({ ...player }, result.defender);
+      if (boss) {
+        runBossTurn({ ...player }, result.defender as BossStats);
+      } else {
+        runMonsterTurn({ ...player }, result.defender);
+      }
     }
   };
   
   const handleEscape = () => {
-    if (isProcessing || !isPlayerTurn || !player || !monster) return;
+    if (isProcessing || !isPlayerTurn || !player) return;
+    const currentEnemy = boss || monster;
+    if (!currentEnemy) return;
 
     setIsPlayerTurn(false); // 턴 종료
     addLog(`🤫 ${player.name}은(는) 도망을 시도한다...`, 'normal');
@@ -970,18 +1459,26 @@ export const useGameEngine = () => {
 		// '유효 스탯'의 행운으로 도망 확률 계산
 		const effectivePlayer = getEffectivePlayerStats(player);
     let escapeRate = 50;
-    if (effectivePlayer.luk >= monster.luk * 2) {
+    if (effectivePlayer.luk >= currentEnemy.luk * 2) {
       escapeRate = 100;
     }
 
     setTimeout(() => {
       if (getRandom(1, 100) <= escapeRate) {
         // 도망 성공
-        handleBattleEnd('escape', { ...player });
+        if (boss) {
+          handleBossBattleEnd('escape', { ...player });
+        } else {
+          handleBattleEnd('escape', { ...player });
+        }
       } else {
         // 도망 실패
         addLog(`😥 도망치는 데 실패했다...`, 'fail');
-        runMonsterTurn({ ...player }, monster);
+        if (boss) {
+          runBossTurn({ ...player }, currentEnemy as BossStats);
+        } else {
+          runMonsterTurn({ ...player }, currentEnemy);
+        }
       }
     }, 1000); // 도망 시도 딜레이
   };
@@ -1161,8 +1658,9 @@ export const useGameEngine = () => {
 
     if (gameState === 'dungeon') {
       if (key === 's') handleOpenDungeonSelect();
+      if (key === 'b') handleOpenBossSelect();
       if (key === 'r') handleDungeonRecovery();
-			if (key === 'b') handleEnterShop();
+			if (key === 'h') handleEnterShop();
       if (key === 'k') {
         if (isSkillsOpen) handleCloseSkills(); else handleOpenSkills();
       }
@@ -1190,7 +1688,7 @@ export const useGameEngine = () => {
 
   return {
     player,
-    monster,
+    monster: boss || monster, // 보스가 있으면 보스, 없으면 일반 몬스터
     logMessages,
     gameState,
     isPlayerTurn,
@@ -1202,11 +1700,17 @@ export const useGameEngine = () => {
     currentDungeonId,
     showBattleChoice,
     dungeons,
+    bossDungeons,
+    bossCooldowns,
     shopLists: { weapons: weaponShopList, armors: armorShopList, pets: petShopList },
     actions: {
       gameStart,
       handleSelectDungeon,
+      handleSelectBossDungeon,
       handleOpenDungeonSelect,
+      handleCloseDungeonSelect,
+      handleOpenBossSelect,
+      handleCloseBossSelect,
       handleNextDungeon,
       handleDungeonRecovery,
       handleAttack,
@@ -1233,7 +1737,6 @@ export const useGameEngine = () => {
       learnSkill,
       handleContinueBattle,
       handleExitDungeon,
-      handleCloseDungeonSelect,
     },
   };
 };

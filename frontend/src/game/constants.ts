@@ -1,4 +1,4 @@
-import type { MonsterList, Skill, Dungeon, Pet } from "./types";
+import type { MonsterList, Skill, Dungeon, Pet, BossDungeon, BossStats, SkillKey } from "./types";
 
 // 밸런스 컨트롤러
 export const ctrl = {
@@ -445,3 +445,114 @@ export const petShopList: Array<Pet & { price: number }> = [
     price: 1500,
   },
 ];
+
+// 보스 이름 및 아이콘 매핑
+const bossNames: Record<number, string> = {
+  5: "고블린 왕",
+  10: "늑대 군주",
+  15: "얼음 거인",
+  20: "다크 나이트",
+  25: "드래곤 로드",
+  30: "데몬 킹",
+};
+
+const bossIcons: Record<number, string> = {
+  5: "👑",
+  10: "🐺",
+  15: "❄️",
+  20: "⚔️",
+  25: "🐉",
+  30: "😈",
+};
+
+// 보스 던전 목록 (5레벨마다 한 개씩)
+export const bossDungeons: BossDungeon[] = [
+  {
+    id: "boss_5",
+    name: bossNames[5],
+    description: `${bossNames[5]}이(가) 기다린다. 강력한 스킬을 사용한다.`,
+    requiredLevel: 5,
+    bossLevel: 5,
+    icon: bossIcons[5],
+  },
+  {
+    id: "boss_10",
+    name: bossNames[10],
+    description: `${bossNames[10]}이(가) 기다린다. 강력한 스킬을 사용한다.`,
+    requiredLevel: 10,
+    bossLevel: 10,
+    icon: bossIcons[10],
+  },
+  {
+    id: "boss_15",
+    name: bossNames[15],
+    description: `${bossNames[15]}이(가) 기다린다. 강력한 스킬을 사용한다.`,
+    requiredLevel: 15,
+    bossLevel: 15,
+    icon: bossIcons[15],
+  },
+  {
+    id: "boss_20",
+    name: bossNames[20],
+    description: `${bossNames[20]}이(가) 기다린다. 강력한 스킬을 사용한다.`,
+    requiredLevel: 20,
+    bossLevel: 20,
+    icon: bossIcons[20],
+  },
+  {
+    id: "boss_25",
+    name: bossNames[25],
+    description: `${bossNames[25]}이(가) 기다린다. 강력한 스킬을 사용한다.`,
+    requiredLevel: 25,
+    bossLevel: 25,
+    icon: bossIcons[25],
+  },
+  {
+    id: "boss_30",
+    name: bossNames[30],
+    description: `${bossNames[30]}이(가) 기다린다. 강력한 스킬을 사용한다.`,
+    requiredLevel: 30,
+    bossLevel: 30,
+    icon: bossIcons[30],
+  },
+];
+
+// 보스 생성 함수
+export const createBoss = (bossLevel: number): BossStats => {
+  // 보스 스탯 계산 (일반 몬스터보다 훨씬 강함)
+  const baseHp = bossLevel * 200; // 일반 몬스터보다 훨씬 높은 HP
+  const baseAtk = bossLevel * 80;
+  const baseDef = bossLevel * 60;
+  const baseLuk = bossLevel * 15;
+
+  // 보스 이름 (매핑에서 가져오기)
+  const bossName = bossNames[bossLevel] || `보스 ${bossLevel}`;
+
+  // 보스가 사용할 수 있는 스킬 (레벨에 따라 다름)
+  const bossSkills: SkillKey[] = [];
+  if (bossLevel >= 5) {
+    bossSkills.push("hex", "ironWill", "shadowVeil");
+  }
+  if (bossLevel >= 10) {
+    bossSkills.push("battleCryWar", "cleave", "bladeFlurry");
+  }
+  if (bossLevel >= 15) {
+    bossSkills.push("warSmash", "crushingRoar", "flurry");
+  }
+  if (bossLevel >= 20) {
+    bossSkills.push("berserkRush", "vampiricAura", "THEWORLD");
+  }
+
+  return {
+    name: bossName,
+    level: bossLevel,
+    hp: baseHp,
+    maxHp: baseHp,
+    atk: baseAtk,
+    def: baseDef,
+    luk: baseLuk,
+    skills: bossSkills,
+    skillCooldowns: {},
+    activeBuffs: [],
+  };
+};

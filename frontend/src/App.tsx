@@ -10,6 +10,7 @@ import PetEnhanceScreen from './components/PetEnhanceScreen';
 import WeaponEnhanceScreen from './components/WeaponEnhanceScreen';
 import SkillsScreen from './components/SkillsScreen';
 import DungeonSelectionScreen from './components/DungeonSelectionScreen';
+import BossSelectionScreen from './components/BossSelectionScreen';
 import { useGameEngine } from './hooks/useGameEngine';
 
 function App() {
@@ -26,6 +27,8 @@ function App() {
     isSkillsOpen,
     showBattleChoice,
     dungeons,
+    bossDungeons,
+    bossCooldowns,
     actions,
   } = useGameEngine();
 
@@ -66,6 +69,26 @@ function App() {
     );
   }
 
+  // 2-1. 보스 던전 선택 화면
+  if (gameState === 'bossSelect') {
+    return (
+      <div className="flex min-h-screen flex-col bg-gray-50">
+        <Header />
+        <main className="mx-auto w-full max-w-5xl px-5 pb-10 md:px-8">
+          <StatusDisplay player={player} />
+          <GameLog messages={logMessages} />
+        </main>
+        <BossSelectionScreen
+          player={player}
+          bossDungeons={bossDungeons}
+          bossCooldowns={bossCooldowns}
+          onSelectBossDungeon={actions.handleSelectBossDungeon}
+          onExit={actions.handleCloseBossSelect}
+        />
+      </div>
+    );
+  }
+
   // 3. 메인 게임 화면
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
@@ -99,6 +122,7 @@ function App() {
           onOpenSkills={actions.handleOpenSkills}
           onUseSkill={actions.handleUseSkill}
           onOpenDungeonSelect={actions.handleOpenDungeonSelect}
+          onOpenBossSelect={actions.handleOpenBossSelect}
           showBattleChoice={showBattleChoice}
           onContinueBattle={actions.handleContinueBattle}
           onExitDungeon={actions.handleExitDungeon}

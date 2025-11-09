@@ -21,6 +21,7 @@ interface ActionMenuProps {
   onOpenSkills: () => void;
   onUseSkill: (key: SkillKey) => void;
   onOpenDungeonSelect: () => void;
+  onOpenBossSelect: () => void;
   onContinueBattle: () => void;
   onExitDungeon: () => void;
 }
@@ -68,6 +69,7 @@ const ActionMenu = ({
   skills = [],
   onUseSkill,
   onOpenDungeonSelect,
+  onOpenBossSelect,
   showBattleChoice = false,
   onContinueBattle,
   onExitDungeon,
@@ -85,10 +87,13 @@ const ActionMenu = ({
           <ActionButton onClick={onOpenDungeonSelect} disabled={isProcessing} hotkey="S">
             던전 탐험
           </ActionButton>
+          <ActionButton onClick={onOpenBossSelect} disabled={isProcessing} hotkey="B">
+            보스 던전
+          </ActionButton>
           <ActionButton onClick={onDungeonRecover} disabled={isProcessing} hotkey="R">
             휴식
           </ActionButton>
-					<ActionButton onClick={onEnterShop} disabled={isProcessing} hotkey="B">
+					<ActionButton onClick={onEnterShop} disabled={isProcessing} hotkey="H">
             상점
           </ActionButton>
           <ActionButton onClick={onOpenSkills} disabled={isProcessing} hotkey="K">

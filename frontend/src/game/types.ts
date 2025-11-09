@@ -195,10 +195,41 @@ export interface Dungeon {
   icon: string;
 }
 
+// 보스 타입 (스킬 사용 가능)
+export interface BossStats extends CharacterStats {
+  skills: SkillKey[]; // 보스가 사용할 수 있는 스킬 목록
+  skillCooldowns?: Partial<Record<SkillKey, number>>; // 보스 스킬 쿨다운
+  activeBuffs?: Array<{
+    key: SkillKey;
+    remainingTurns: number;
+    bonuses: { atk?: number; def?: number; luk?: number };
+    evadeAll?: boolean;
+    reflectPercent?: number;
+    barrier?: boolean;
+    chargeAttackMultiplier?: number;
+    counterDamage?: number;
+    lifeStealPercent?: number;
+    weakenPercent?: number;
+    multiStrikeNext?: boolean;
+    trueStrikeNext?: boolean;
+  }>; // 보스 버프
+}
+
+// 보스 던전 타입
+export interface BossDungeon {
+  id: string;
+  name: string;
+  description: string;
+  requiredLevel: number;
+  bossLevel: number;
+  icon: string;
+}
+
 // 게임 상태
 export type GameState =
   | "setup"
   | "dungeonSelect"
+  | "bossSelect"
   | "dungeon"
   | "battle"
   | "shop"
