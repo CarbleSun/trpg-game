@@ -42,18 +42,22 @@ export interface PlayerStats extends CharacterStats {
   defCount: number;
   weapon: EquipmentItem | null; // 무기
   armor: EquipmentItem | null; // 방어구
+
   // 펫 시스템
   pet?: Pet | null;
+
   // 강화 시스템
   weaponUpgradeLevel?: number; // [deprecated] 전역 무기 강화 레벨
   petPowerBonus?: number; // [deprecated] 전역 펫 보너스
   weaponEnhanceLevels?: Record<string, number>; // 무기별 강화 레벨
   armorEnhanceLevels?: Record<string, number>; // 방어구별 강화 레벨
   petEnhanceLevels?: Record<string, number>; // 펫별 강화 레벨
+
   // 보유 목록
   ownedWeaponIds?: string[];
   ownedArmorIds?: string[];
   ownedPetIds?: string[];
+	
   // 스킬 시스템
   skillPoints: number; // 보유 스킬 포인트
   skills: SkillKey[]; // 습득한 스킬 키 목록

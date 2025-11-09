@@ -22,11 +22,11 @@ import { getRandom } from '../game/utils';
  */
 const jobStatModifiers = {
   // 마법사: HP/DEF 낮음, ATK 높음
-  "마법사": { hp: 0.8, atk: 1.2, def: 0.7, luk: 1.0 },
+  "마법사": { hp: 1.0, atk: 1.5, def: 0.9, luk: 1.0 },
   // 전사: HP/DEF 높음, ATK/LUK 낮음
-  "전사": { hp: 1.3, atk: 0.8, def: 1.2, luk: 0.7 },
+  "전사": { hp: 1.5, atk: 0.7, def: 1.3, luk: 0.8 },
   // 도적: LUK 높음, DEF 약간 낮음
-  "도적": { hp: 1.0, atk: 1.0, def: 0.9, luk: 1.3 },
+  "도적": { hp: 1.0, atk: 1.0, def: 1.0, luk: 1.3 },
 };
 
 /**
