@@ -84,6 +84,7 @@ const createNewPlayer = (name: string, job: Job): PlayerStats => {
     ownedPetIds: [],
     skillPoints: 0,
     skills: [],
+    skillUpgradeLevels: {},
   };
 };
 
@@ -372,14 +373,16 @@ export const useGameEngine = () => {
     };
   };
 
-  // 스킬 관련: 배울 수 있는지 검사 및 배우기
+  // 스킬 관련: 배울 수 있는지 검사 및 배우기 (최대 5번까지)
   const canLearnSkill = (p: PlayerStats, key: typeof allSkills[number]['key']): boolean => {
     const skill = allSkills.find(s => s.key === key);
     if (!skill) return false;
-    if (p.skills.includes(key)) return false;
     if (p.level < skill.requiredLevel) return false;
     if (skill.allowedJobs && !skill.allowedJobs.includes(p.job)) return false;
     if ((p.skillPoints || 0) <= 0) return false;
+    // 이미 배운 스킬이면 레벨 체크
+    const currentLevel = (p.skillUpgradeLevels || {})[key] || 0;
+    if (currentLevel >= 5) return false; // 최대 레벨 도달
     return true;
   };
 
@@ -390,13 +393,27 @@ export const useGameEngine = () => {
       return;
     }
     const skill = allSkills.find(s => s.key === key)!;
+    const currentLevel = (player.skillUpgradeLevels || {})[key] || 0;
+    const newLevel = currentLevel + 1;
+    
+    // 처음 배우는 스킬이면 skills 배열에 추가
+    const updatedSkills = player.skills.includes(key) 
+      ? player.skills 
+      : [...player.skills, key];
+    
     const updated = {
       ...player,
       skillPoints: player.skillPoints - 1,
-      skills: [...player.skills, key],
+      skills: updatedSkills,
+      skillUpgradeLevels: { ...(player.skillUpgradeLevels || {}), [key]: newLevel },
     };
     setPlayer(updated);
-    addLog(`📘 "${skill.name}" 스킬을 습득했다!`, 'normal');
+    
+    if (currentLevel === 0) {
+      addLog(`📘 "${skill.name}" 스킬을 배웠다! (Lv.${newLevel}/5)`, 'normal');
+    } else {
+      addLog(`📘 "${skill.name}" 스킬을 더 배웠다! (Lv.${newLevel}/5)`, 'normal');
+    }
   };
 
   /**
@@ -864,17 +881,23 @@ export const useGameEngine = () => {
 
     setIsPlayerTurn(false); // 행동 소모
 
+    // 업그레이드 레벨 가져오기
+    const upgradeLevel = (player.skillUpgradeLevels || {})[key] || 0;
+    const upgradeMultiplier = 1 + (upgradeLevel * 0.2); // 업그레이드당 20% 증가 (최대 100%)
+
     if (skill.kind === 'buff') {
-      const duration = skill.duration || 1;
+      // 지속 시간 증가 (업그레이드당 +1턴, 최대 +5턴)
+      const baseDuration = skill.duration || 1;
+      const duration = baseDuration + upgradeLevel;
       const bonuses = skill.bonuses || {};
       const extra: any = {};
       if (skill.effect?.type === 'evade') extra.evadeAll = true;
-      if (skill.effect?.type === 'reflect') extra.reflectPercent = skill.effect.value;
+      if (skill.effect?.type === 'reflect') extra.reflectPercent = skill.effect.value * upgradeMultiplier;
       if (skill.effect?.type === 'barrier') extra.barrier = true;
-      if (skill.effect?.type === 'charge') extra.chargeAttackMultiplier = skill.effect.value;
-      if (skill.effect?.type === 'counter') extra.counterDamage = skill.effect.value;
-      if (skill.effect?.type === 'lifesteal') extra.lifeStealPercent = skill.effect.value;
-      if (skill.effect?.type === 'weaken') extra.weakenPercent = skill.effect.value;
+      if (skill.effect?.type === 'charge') extra.chargeAttackMultiplier = skill.effect.value * upgradeMultiplier;
+      if (skill.effect?.type === 'counter') extra.counterDamage = Math.floor((skill.effect.value || 0) * upgradeMultiplier);
+      if (skill.effect?.type === 'lifesteal') extra.lifeStealPercent = skill.effect.value * upgradeMultiplier;
+      if (skill.effect?.type === 'weaken') extra.weakenPercent = Math.min(0.99, skill.effect.value * upgradeMultiplier);
       if (skill.effect?.type === 'multiStrike') extra.multiStrikeNext = true;
       if (skill.effect?.type === 'trueStrike') extra.trueStrikeNext = true;
       const updatedPlayer: PlayerStats = {
@@ -883,7 +906,8 @@ export const useGameEngine = () => {
         skillCooldowns: { ...(player.skillCooldowns || {}), [key]: skill.cooldown },
       };
       setPlayer(updatedPlayer);
-      addLog(`🛡 스킬 사용: ${skill.name} (지속 ${duration}턴)`, 'normal');
+      const upgradeText = upgradeLevel > 0 ? ` (업그레이드 Lv.${upgradeLevel})` : '';
+      addLog(`🛡 스킬 사용: ${skill.name} (지속 ${duration}턴)${upgradeText}`, 'normal');
       // 몬스터 턴 진행
       runMonsterTurn(updatedPlayer, monster);
       return;
@@ -891,17 +915,21 @@ export const useGameEngine = () => {
     if (skill.effect?.type === 'timeStop') {
       // 추가 턴 획득: 행동 소모하되 턴 유지
       setPlayer({ ...player, skillCooldowns: { ...(player.skillCooldowns || {}), [key]: skill.cooldown } });
-      addLog(`⏳ 시간 정지! 추가 턴을 얻었다.`, 'cri');
+      const upgradeText = upgradeLevel > 0 ? ` (업그레이드 Lv.${upgradeLevel})` : '';
+      addLog(`⏳ 시간 정지! 추가 턴을 얻었다.${upgradeText}`, 'cri');
       setIsPlayerTurn(true);
       setIsProcessing(false);
       return;
     }
 
     if (skill.effect?.type === 'stun') {
-      const turns = Math.max(1, Math.floor(skill.effect.value));
+      // 스턴 턴 수 증가 (업그레이드당 +1턴)
+      const baseTurns = Math.max(1, Math.floor(skill.effect.value));
+      const turns = baseTurns + upgradeLevel;
       const updated = { ...player, monsterStunnedTurns: (player.monsterStunnedTurns || 0) + turns };
       setPlayer({ ...updated, skillCooldowns: { ...(player.skillCooldowns || {}), [key]: skill.cooldown } });
-      addLog(`🌀 적이 ${turns}턴 동안 기절했다!`, 'cri');
+      const upgradeText = upgradeLevel > 0 ? ` (업그레이드 Lv.${upgradeLevel})` : '';
+      addLog(`🌀 적이 ${turns}턴 동안 기절했다!${upgradeText}`, 'cri');
       // 스턴은 사용으로 행동 소모되고, 다음 몬스터 턴에 적용되어 스킵됨
       runMonsterTurn(updated, monster);
       return;
@@ -909,13 +937,17 @@ export const useGameEngine = () => {
 
     // 공격형 액티브: 강화된 공격 1회 수행
     const effectivePlayer = getEffectivePlayerStats(player);
+    // 업그레이드에 따른 공격력 증가 적용
+    const baseMultiplier = skill.attackBonusMultiplier || 0;
+    const upgradedMultiplier = baseMultiplier * upgradeMultiplier;
     // 기본 공격 계산
     const result = calculateAttack(
-      { ...effectivePlayer, atk: Math.floor(effectivePlayer.atk * (1 + (skill.attackBonusMultiplier || 0))) },
+      { ...effectivePlayer, atk: Math.floor(effectivePlayer.atk * (1 + upgradedMultiplier)) },
       monster,
       !!skill.guaranteedCrit,
     );
-    addLogs([{ msg: `🔥 스킬 사용: ${skill.name}`, type: 'cri' }, ...result.logs]);
+    const upgradeText = upgradeLevel > 0 ? ` (업그레이드 Lv.${upgradeLevel})` : '';
+    addLogs([{ msg: `🔥 스킬 사용: ${skill.name}${upgradeText}`, type: 'cri' }, ...result.logs]);
     setMonster(result.defender);
 
     // 쿨다운 부여
