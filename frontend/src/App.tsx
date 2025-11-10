@@ -11,6 +11,7 @@ import WeaponEnhanceScreen from './components/WeaponEnhanceScreen';
 import SkillsScreen from './components/SkillsScreen';
 import DungeonSelectionScreen from './components/DungeonSelectionScreen';
 import BossSelectionScreen from './components/BossSelectionScreen';
+import BossRewardModal from './components/BossRewardModal';
 import { useGameEngine } from './hooks/useGameEngine';
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
     dungeons,
     bossDungeons,
     bossCooldowns,
+		bossReward,
     actions,
   } = useGameEngine();
 
@@ -178,6 +180,15 @@ function App() {
           skills={skills}
           onClose={actions.handleCloseSkills}
           onLearn={actions.learnSkill}
+        />
+      )}
+
+			{/* 보스 보상 모달 렌더링 */}
+      {gameState === 'bossReward' && bossReward && (
+        <BossRewardModal
+          player={player}
+          reward={bossReward}
+          onAction={actions.handleBossRewardAction}
         />
       )}
 

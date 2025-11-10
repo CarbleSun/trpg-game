@@ -11,10 +11,21 @@ import type {
   Dungeon,
   BossStats,
   SkillKey,
+	BossReward, // 보스 드롭 아이템
 } from '../game/types';
 import { ctrl, monsterList, skills as allSkills, dungeons, petShopList, bossDungeons, createBoss } from '../game/constants';
 import { weaponShopList, armorShopList } from '../game/shopItems';
 import { getRandom } from '../game/utils';
+
+const TIER_3_PLUS_WEAPON_IDS = ['w8', 'w9', 'w10', 'w11'];
+const TIER_3_PLUS_ARMOR_IDS = ['a8', 'a9', 'a10', 'a11'];
+
+// ID를 기반으로 실제 아이템 목록을 필터링
+const bossRewardWeaponPool = weaponShopList.filter(item => TIER_3_PLUS_WEAPON_IDS.includes(item.id));
+const bossRewardArmorPool = armorShopList.filter(item => TIER_3_PLUS_ARMOR_IDS.includes(item.id));
+
+// 전체 보상 풀
+const bossRewardPool = [...bossRewardWeaponPool, ...bossRewardArmorPool];
 
 // --- 순수 계산 함수 (rpg.js 로직 포팅) ---
 
@@ -310,6 +321,9 @@ export const useGameEngine = () => {
     const stored = localStorage.getItem('dungeonKillCounts');
     return stored ? JSON.parse(stored) : {};
   });
+
+	// 보스 보상 상태 추가
+  const [bossReward, setBossReward] = useState<BossReward | null>(null);
 
   /**
    * 로그 추가 유틸리티
@@ -792,6 +806,7 @@ export const useGameEngine = () => {
     setRecoveryCharges(5);
     let playerAfterBattle = { ...updatedPlayer };
     const logs: Omit<LogMessage, 'id'>[] = [];
+    let didDropItem = false; // 아이템 드롭 여부 플래그
 
     if (type === 'victory' && targetBoss && currentBossDungeonId) {
       logs.push({ msg: `🎉 보스 전투에서 승리했다! ${targetBoss.name}을(를) 물리쳤다.`, type: 'vic' });
@@ -806,10 +821,30 @@ export const useGameEngine = () => {
       logs.push({ msg: `👑 ${gainedExp} Exp를 획득했다.`, type: 'gainExp' });
       logs.push({ msg: `💰 ${gainedGold} Gold를 획득했다.`, type: 'gainMoney' });
 
-      // 레벨업 체크
+      // 레벨업 체크 (보상 지급 후에)
       const levelUpResult = checkLevelUp(playerAfterBattle);
       playerAfterBattle = levelUpResult.newPlayer;
       logs.push(...levelUpResult.logs);
+
+      // --- 보스 드롭 로직
+      const DROP_CHANCE = 30; // 30% 확률
+      if (getRandom(1, 100) <= DROP_CHANCE && bossRewardPool.length > 0) {
+        didDropItem = true;
+        const rewardItem = bossRewardPool[getRandom(0, bossRewardPool.length - 1)];
+        
+        const ownedList = rewardItem.type === 'weapon' ? (playerAfterBattle.ownedWeaponIds || []) : (playerAfterBattle.ownedArmorIds || []);
+        const isDuplicate = ownedList.includes(rewardItem.id);
+        const isUsable = !rewardItem.allowedJobs || rewardItem.allowedJobs.includes(playerAfterBattle.job);
+        const sellPrice = Math.floor(rewardItem.price * 0.5); // 정가 50%
+
+        setBossReward({ item: rewardItem, isDuplicate, isUsable, sellPrice });
+        setGameState('bossReward'); // 모달 상태로 전환
+        setShowBattleChoice(false); // 전투 후 선택지 숨김
+        logs.push({ msg: `🎁 [보스 드롭] ${rewardItem.name} 획득!`, type: 'lvup' });
+
+      } else {
+        logs.push({ msg: `💨 아쉽지만, 특별한 아이템은 나오지 않았습니다...`, type: 'fail' });
+      }
 
       // 보스 던전 쿨타임 설정
       const newCooldowns = {
@@ -837,12 +872,16 @@ export const useGameEngine = () => {
     setIsProcessing(false);
     setIsPlayerTurn(true);
     
-    if (type === 'victory') {
+    // 승리 && 아이템 드롭 안됨 -> 선택지 표시
+    // 패배 || 도망 -> 던전으로
+    if (type === 'victory' && !didDropItem) {
       setShowBattleChoice(true);
-    } else {
+      setGameState('dungeon'); // GameState는 dungeon으로 복귀 (UI는 showBattleChoice로 제어)
+    } else if (type !== 'victory') {
       setGameState('dungeon');
       setCurrentBossDungeonId(null);
     }
+    // (승리 && 아이템 드롭 시: GameState는 'bossReward'가 됨)
   };
 
   /**
@@ -1651,6 +1690,64 @@ export const useGameEngine = () => {
     setPlayer(prev => prev ? { ...prev, money: prev.money - cost, weaponEnhanceLevels: { ...(prev.weaponEnhanceLevels || {}), [weaponId]: nextLevel } } : prev);
     addLog(`🔧 무기 강화! ATK +5 (강화 ${nextLevel}단)`, 'lvup');
   };
+
+	// --- 👇 5. handleKeyDown 함수 이전에 새 함수 추가 ---
+  const handleBossRewardAction = (action: 'equip' | 'sell' | 'ignore', reward: BossReward) => {
+    if (!player) return;
+
+    let updatedPlayer = { ...player };
+    const logs: Omit<LogMessage, 'id'>[] = [];
+
+    // 아이템 소유권 처리 헬퍼
+    const grantOwnership = (p: PlayerStats, item: EquipmentItem): PlayerStats => {
+      if (item.type === 'weapon') {
+        if (!(p.ownedWeaponIds || []).includes(item.id)) {
+          p.ownedWeaponIds = [...(p.ownedWeaponIds || []), item.id];
+        }
+      } else if (item.type === 'armor') {
+        if (!(p.ownedArmorIds || []).includes(item.id)) {
+          p.ownedArmorIds = [...(p.ownedArmorIds || []), item.id];
+        }
+      }
+      return p;
+    };
+
+    if (action === 'equip') {
+      logs.push({ msg: `✨ ${reward.item.name}을(를) 장착했습니다!`, type: 'vic' });
+
+      // 기존 장비가 '나무 몽둥이'가 아닐 경우에만 판매
+      const oldItem = reward.item.type === 'weapon' ? updatedPlayer.weapon : updatedPlayer.armor;
+      if (oldItem && oldItem.id !== STARTER_CLUB.id) {
+        const oldItemSellPrice = Math.floor(oldItem.price * 0.5);
+        logs.push({ msg: `🛡️ 기존 장비 ${oldItem.name}을(를) 판매하여 ${oldItemSellPrice} G를 획득했습니다.`, type: 'gainMoney' });
+        updatedPlayer.money += oldItemSellPrice;
+      }
+
+      // 새 아이템 장착 및 소유
+      updatedPlayer = grantOwnership(updatedPlayer, reward.item);
+      if (reward.item.type === 'weapon') {
+        updatedPlayer.weapon = reward.item;
+      } else if (reward.item.type === 'armor') {
+        updatedPlayer.armor = reward.item;
+      }
+    } 
+    else if (action === 'sell') {
+      logs.push({ msg: `💰 ${reward.item.name}을(를) ${reward.sellPrice} G에 판매했습니다.`, type: 'gainMoney' });
+      updatedPlayer.money += reward.sellPrice;
+      // 판매 시에는 소유권 목록에 추가하지 않음 (다시 드롭될 수 있음)
+    } 
+    else if (action === 'ignore') {
+      logs.push({ msg: `아이템 ${reward.item.name}을(를) 무시했습니다. (소유 목록에 추가)`, type: 'fail' });
+      // 무시할 경우 소유권 목록에 추가 (중복 드롭 방지)
+      updatedPlayer = grantOwnership(updatedPlayer, reward.item);
+    }
+    
+    addLogs(logs);
+    setPlayer(updatedPlayer);
+    setBossReward(null); // 모달 닫기
+    setShowBattleChoice(true); // 전투 후 선택지 다시 표시
+    setGameState('dungeon'); // 던전으로 복귀
+  };
   
   // 키보드 이벤트 핸들러 (단축키)
   const handleKeyDown = (key: string) => {
@@ -1685,7 +1782,6 @@ export const useGameEngine = () => {
     }
   };
 
-
   return {
     player,
     monster: boss || monster, // 보스가 있으면 보스, 없으면 일반 몬스터
@@ -1703,6 +1799,7 @@ export const useGameEngine = () => {
     bossDungeons,
     bossCooldowns,
     shopLists: { weapons: weaponShopList, armors: armorShopList, pets: petShopList },
+		bossReward,
     actions: {
       gameStart,
       handleSelectDungeon,
@@ -1737,6 +1834,7 @@ export const useGameEngine = () => {
       learnSkill,
       handleContinueBattle,
       handleExitDungeon,
+			handleBossRewardAction, // 보스 보상 관련 함수
     },
   };
 };
