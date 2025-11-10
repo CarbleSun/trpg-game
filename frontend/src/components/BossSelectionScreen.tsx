@@ -42,7 +42,7 @@ const BossSelectionScreen = ({
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         {/* 내부 클릭 시 닫기 방지 */}
         <div 
-          className="relative w-full max-w-4xl rounded-lg bg-white p-8 shadow-xl font-stat max-h-[90vh] overflow-y-auto"
+          className="relative w-full max-w-4xl rounded-lg bg-white p-8 shadow-xl font-stat max-h-[95vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
         <h2 className="text-3xl font-bold mb-4 text-center">보스 던전 선택</h2>
