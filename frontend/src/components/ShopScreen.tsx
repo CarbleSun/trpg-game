@@ -281,7 +281,7 @@ const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEqui
               className="rounded border border-gray-700 px-4 py-2 
                          font-stat text-sm hover:bg-red-600 hover:text-white"
             >
-              나가기 (B / Q)
+              나가기 (H / Q)
             </button>
           </div>
 

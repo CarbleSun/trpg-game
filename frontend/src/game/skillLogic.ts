@@ -1,0 +1,35 @@
+// src/game/skillLogic.ts
+
+import type { PlayerStats, SkillKey } from './types';
+import { skills as allSkills } from '../game/constants';
+
+/**
+ * 스킬 지속/쿨다운 틱 (플레이어 턴 시작 시)
+ */
+export const tickSkills = (p: PlayerStats): PlayerStats => {
+  const nextBuffs = (p.activeBuffs || [])
+    .map(b => ({ ...b, remainingTurns: b.remainingTurns - 1 }))
+    .filter(b => b.remainingTurns > 0);
+  const nextCooldowns: NonNullable<PlayerStats['skillCooldowns']> = { ...(p.skillCooldowns || {}) };
+  Object.keys(nextCooldowns).forEach(k => {
+    const key = k as keyof typeof nextCooldowns;
+    if (typeof nextCooldowns[key] === 'number' && (nextCooldowns[key] as number) > 0) {
+      nextCooldowns[key] = Math.max(0, (nextCooldowns[key] as number) - 1);
+    }
+  });
+  return { ...p, activeBuffs: nextBuffs, skillCooldowns: nextCooldowns };
+};
+
+/**
+ * 스킬을 배울 수 있는지 검사
+ */
+export const canLearnSkill = (p: PlayerStats, key: SkillKey): boolean => {
+  const skill = allSkills.find(s => s.key === key);
+  if (!skill) return false;
+  if (p.level < skill.requiredLevel) return false;
+  if (skill.allowedJobs && !skill.allowedJobs.includes(p.job)) return false;
+  if ((p.skillPoints || 0) <= 0) return false;
+  const currentLevel = (p.skillUpgradeLevels || {})[key] || 0;
+  if (currentLevel >= 5) return false; // 최대 레벨
+  return true;
+};

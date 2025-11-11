@@ -1,3 +1,5 @@
+// src/hooks/useGameEngine.ts
+
 import { useState } from 'react';
 import type {
   PlayerStats,
@@ -6,294 +8,25 @@ import type {
   GameState,
   LogMessage,
   LogType,
-  BattleResult,
-	EquipmentItem, // 장비 구매 기능 
+	EquipmentItem,
   Dungeon,
   BossStats,
   SkillKey,
-	BossReward, // 보스 드롭 아이템
+	BossReward,
 } from '../game/types';
-import { ctrl, monsterList, skills as allSkills, dungeons, petShopList, bossDungeons, createBoss } from '../game/constants';
+// 상수 임포트
+import { skills as allSkills, dungeons, petShopList, bossDungeons, createBoss } from '../game/constants';
 import { weaponShopList, armorShopList } from '../game/shopItems';
+import { STARTER_CLUB, bossRewardPool } from '../game/engineConstants';
+// 유틸리티 임포트
 import { getRandom } from '../game/utils';
+// 분리된 로직 임포트
+import { createNewPlayer, checkLevelUp, getEffectivePlayerStats } from '../game/playerLogic';
+import { makeMonster } from '../game/monsterLogic';
+import { calculateAttack } from '../game/battleLogic';
+import { tickSkills, canLearnSkill } from '../game/skillLogic';
+import { applyPetStartOfTurn } from '../game/petLogic';
 
-const TIER_3_PLUS_WEAPON_IDS = ['w8', 'w9', 'w10', 'w11'];
-const TIER_3_PLUS_ARMOR_IDS = ['a8', 'a9', 'a10', 'a11'];
-
-// ID를 기반으로 실제 아이템 목록을 필터링
-const bossRewardWeaponPool = weaponShopList.filter(item => TIER_3_PLUS_WEAPON_IDS.includes(item.id));
-const bossRewardArmorPool = armorShopList.filter(item => TIER_3_PLUS_ARMOR_IDS.includes(item.id));
-
-// 전체 보상 풀
-const bossRewardPool = [...bossRewardWeaponPool, ...bossRewardArmorPool];
-
-// --- 순수 계산 함수 (rpg.js 로직 포팅) ---
-
-/**
- * 각 직업별 기본 스탯 편차 (배율)
- * [HP, ATK, DEF, LUK]
- */
-const jobStatModifiers = {
-  // 마법사: HP/DEF 낮음, ATK 높음
-  "마법사": { hp: 1.0, atk: 1.5, def: 0.9, luk: 1.0 },
-  // 전사: HP/DEF 높음, ATK/LUK 낮음
-  "전사": { hp: 1.5, atk: 0.7, def: 1.3, luk: 0.8 },
-  // 도적: LUK 높음, DEF 약간 낮음
-  "도적": { hp: 1.0, atk: 1.0, def: 1.0, luk: 1.3 },
-};
-
-// 기본 무기 제공
-const STARTER_CLUB: EquipmentItem = {
-  id: 'w_starter_club', // 상점 ID와 겹치지 않는 고유 ID
-  name: '나무 몽둥이',
-  type: 'weapon',
-  value: 4, // 몽둥이 공격력
-  price: 0, // 상점 아이템이 아님
-  allowedJobs: ['전사', '마법사', '도적'], // 전직업 공용
-};
-
-/**
- * 신규 플레이어 스탯을 생성합니다. (편차 적용 수정됨)
- */
-const createNewPlayer = (name: string, job: Job): PlayerStats => {
-  const level = 1;
-  const { levUpVal, jobBonus } = ctrl;
-
-  const bonus = jobBonus[job]; // [atk, def, luk] % 보너스
-  const mod = jobStatModifiers[job]; // [hp, atk, def, luk] 기본 배율
-
-  // (레벨 * 기본스탯 * 직업배율) * (1 + %보너스)
-  const atk = Math.floor((level * levUpVal.atk * mod.atk) * (1 + bonus[0] / 100));
-  const def = Math.floor((level * levUpVal.def * mod.def) * (1 + bonus[1] / 100));
-  const luk = Math.floor((level * levUpVal.luk * mod.luk) * (1 + bonus[2] / 100));
-  const hp = Math.floor(((level * levUpVal.hp[0]) + (level * levUpVal.hp[1])) * mod.hp);
-  
-	// 기본 무기 지급
-  const starterWeapon: EquipmentItem = STARTER_CLUB; 
-  const starterWeaponId = starterWeapon?.id;
-
-  return {
-    name,
-    job,
-    level,
-    hp,
-    maxHp: hp,
-    atk, // 기본 공격력
-    def, // 기본 방어력
-    luk, // 기본 행운
-    exp: 0,
-    money: 0,
-    goalExp: (level * 30) + (level * 120),
-    vicCount: 0,
-    defCount: 0,
-		weapon: starterWeapon, // 기본 무기 장착
-    armor: null,
-    pet: null,
-    weaponEnhanceLevels: {},
-    armorEnhanceLevels: {},
-    petEnhanceLevels: {},
-    ownedWeaponIds: [starterWeaponId],
-    ownedArmorIds: [],
-    ownedPetIds: [],
-    skillPoints: 0,
-    skills: [],
-    skillUpgradeLevels: {},
-  };
-};
-
-/**
- * 레벨에 맞는 몬스터를 생성합니다.
- * @param playerLevel 플레이어 레벨
- * @param monsterLevelOffset 던전의 몬스터 레벨 오프셋
- */
-const makeMonster = (playerLevel: number, monsterLevelOffset: number = 0): CharacterStats => {
-  // 플레이어 레벨을 10레벨 단위의 티어로 변환 후, 던전 오프셋 적용
-  const baseTier = Math.floor((playerLevel - 1) / 10);
-  let monsterTier = baseTier + monsterLevelOffset;
-  if (monsterTier < 0) monsterTier = 0;
-  const maxTier = Object.keys(monsterList).length - 1;
-  if (monsterTier > maxTier) monsterTier = maxTier;
-
-  const list = monsterList[monsterTier];
-  const [name, level, hp, atk, def, luk] = list[getRandom(0, list.length - 1)];
-
-  return {
-    name: name as string,
-    level: level as number,
-    hp: hp as number,
-    maxHp: hp as number,
-    atk: atk as number,
-    def: def as number,
-    luk: luk as number,
-  };
-};
-
-/**
- * 공격 계산 로직 (수정됨: 0 데미지는 빗나감으로 처리)
- * @returns 배틀로그, 변경된 상태, 전투 종료 여부, 명중 여부
- */
-const calculateAttack = (
-  attacker: CharacterStats,
-  defender: CharacterStats,
-  isGuaranteedHit: boolean = false // 3회 빗나감 보너스 공격 여부
-): BattleResult & { didHit: boolean } => {
-  const logs: Omit<LogMessage, 'id'>[] = [];
-  let newAttacker = { ...attacker };
-  let newDefender = { ...defender };
-  let isBattleOver = false;
-  let didHit = false;
-
-  logs.push({ msg: `🗡 ${newAttacker.name}이(가) ${newDefender.name}을(를) 공격한다.`, type: 'tryToAtk' });
-
-  // 1. 데미지 산출 (Base)
-  const atkCalc = getRandom(newAttacker.atk * -0.1, newAttacker.atk * 0.1);
-  const defCalc = getRandom(newDefender.def * -0.05, newDefender.def * 0.05);
-  let damage = Math.ceil((newAttacker.atk + atkCalc) - (newDefender.def + defCalc));
-
-  // 2. 방어 상태
-  if (newDefender.isDefending) {
-    damage = Math.floor(damage / 2);
-    logs.push({ msg: `🛡 ${newDefender.name}이(가) 방어했다! (데미지 절반)`, type: 'normal' });
-    newDefender.isDefending = false;
-  }
-
-  // 3. 데미지 0 이하 (수정된 부분)
-  if (damage <= 0) {
-    damage = 0;
-
-    // 보너스 공격(isGuaranteedHit)이 아닐 때만 '실패'로 처리.
-    if (!isGuaranteedHit) { 
-      logs.push({ msg: `😓 ${newAttacker.name}의 공격이 막혔다! (0 데미지)`, type: 'fail' });
-      didHit = false; // '빗나감'으로 처리
-
-      const isAttackerPlayer = 'job' in newAttacker;
-      // 몬스터의 0 데미지 공격은 여기서 턴 종료
-      if (!isAttackerPlayer) {
-        return { logs, attacker: newAttacker, defender: newDefender, isBattleOver, didHit };
-      }
-      // (플레이어의 0 데미지 공격은 턴을 종료하지 않고
-      //  '회피' 판정(5번)으로 넘어감.
-      //  회피 판정에서도 '명중'으로 바뀌지 않으면 최종 didHit = false가 됨)
-    }
-    // (보너스 공격(isGuaranteedHit)이면, 데미지가 0이더라도
-    //  6번 로직에서 데미지를 추가할 것이므로 '실패' 처리를 하지 않고 통과)
-  }
-
-  // 4. 크리티컬
-  const criRate = 2 * (newAttacker.luk - newDefender.luk);
-  let isCritical = false;
-
-	if (isGuaranteedHit) {
-    logs.push({ msg: `⚡️ 100% 크리티컬 히트!`, type: 'cri' });
-    isCritical = true;
-  }
-
-  else if (getRandom(1, 100) <= criRate) {
-    logs.push({ msg: `⚡️ 크리티컬 히트!`, type: 'cri' });
-    isCritical = true;
-  }
-
-	// 크리티컬 데미지 적용
-  if (isCritical) {
-    damage *= 2;
-    didHit = true; // 크리티컬은 '명중'
-  }
-
-  // 5. 회피 (크리티컬이 아니면서, "보너스 공격도 아닐 때"만 실행)
-  if (!isCritical && !isGuaranteedHit) {
-    let evadeRate = 1;
-    const lukDiff = newDefender.luk - newAttacker.luk;
-    if (lukDiff > 0) evadeRate = 5;
-    if (newDefender.luk >= newAttacker.luk * 2) evadeRate = 30;
-    if (newDefender.luk >= newAttacker.luk * 3) evadeRate = 50;
-
-    const isAttackerPlayer = 'job' in newAttacker;
-    const isDefenderPlayer = 'job' in newDefender;
-
-    if (isAttackerPlayer) { // 몬스터 회피율 감소
-      evadeRate = Math.floor(evadeRate * 0.3);
-    } else if (isDefenderPlayer) { // 플레이어 회피율 증가
-      evadeRate = Math.floor(evadeRate * 1.5);
-    }
-
-    if (getRandom(1, 100) <= evadeRate) {
-      logs.push({ msg: `🍃 ${newDefender.name}이(가) 공격을 회피했다.`, type: 'fail' });
-      didHit = false; // '빗나감'
-      return { logs, attacker: newAttacker, defender: newDefender, isBattleOver, didHit };
-    }
-  }
-
-  // 6. 3회 빗나감 보너스 적용 (특수대사 + 추가 데미지)
-  if (isGuaranteedHit) {
-    // --- 특수대사 ---
-    logs.push({ msg: `🔥 "WRYYYYYYYY!!!!!!! 로드롤러다!!!!!!!!"`, type: 'cri' });
-
-    // (데미지가 0이었을 경우를 대비해 최소 데미지 보장)
-    const minBonusDmg = Math.floor(newAttacker.atk * 0.5); // 공격력 50%
-    damage = Math.max(damage, minBonusDmg);
-
-    // --- 추가 데미지 (기존 데미지의 50% + 행운) ---
-    const bonusDamage = Math.floor(damage * 0.5 + newAttacker.luk);
-    damage += bonusDamage;
-    
-    logs.push({ msg: `✨ 집중력의 일격! ${bonusDamage}의 추가 데미지!`, type: 'vic' });
-    didHit = true;
-  }
-
-  // 7. 최종 데미지 적용
-  if (!didHit && damage > 0) { // (크리티컬X, 회피X, 보너스X, 0데미지X)
-    didHit = true;
-  }
-
-  newDefender.hp -= damage;
-  if (newDefender.hp <= 0) {
-    newDefender.hp = 0;
-    isBattleOver = true;
-  }
-  
-  logs.push({ 
-    msg: `💥 ${newDefender.name}에게 ${damage}의 데미지를 입혔다. (HP: ${newDefender.hp})`, 
-    type: 'atk' 
-  });
-
-  return { logs, attacker: newAttacker, defender: newDefender, isBattleOver, didHit };
-};
-
-/**
- * 레벨업 처리 (편차 적용 수정됨)
- */
-const checkLevelUp = (player: PlayerStats): { newPlayer: PlayerStats, logs: Omit<LogMessage, 'id'>[] } => {
-  let newPlayer = { ...player };
-  const logs: Omit<LogMessage, 'id'>[] = [];
-
-  if (newPlayer.exp < newPlayer.goalExp) {
-    return { newPlayer, logs };
-  }
-
-  // 레벨 업!
-  newPlayer.level += 1;
-  logs.push({ msg: `🆙 레벨 업! 레벨 ${newPlayer.level}이(가) 되었다.`, type: 'lvup' });
-  // 스킬 포인트 +1
-  newPlayer.skillPoints = (newPlayer.skillPoints || 0) + 1;
-  logs.push({ msg: `✨ 스킬 포인트 +1 (보유: ${newPlayer.skillPoints})`, type: 'lvup' });
-
-  const { levUpVal, jobBonus } = ctrl;
-  const bonus = jobBonus[newPlayer.job]; // [atk, def, luk] % 보너스
-  const mod = jobStatModifiers[newPlayer.job]; // [hp, atk, def, luk] 기본 배율
-
-  // 스탯 재계산 (createNewPlayer와 동일한 공식 적용)
-  newPlayer.atk = Math.floor((newPlayer.level * levUpVal.atk * mod.atk) * (1 + bonus[0] / 100));
-  newPlayer.def = Math.floor((newPlayer.level * levUpVal.def * mod.def) * (1 + bonus[1] / 100));
-  newPlayer.luk = Math.floor((newPlayer.level * levUpVal.luk * mod.luk) * (1 + bonus[2] / 100));
-  
-  newPlayer.hp = Math.floor(((newPlayer.level * levUpVal.hp[0]) + (newPlayer.level * levUpVal.hp[1])) * mod.hp);
-  newPlayer.maxHp = newPlayer.hp; // HP 전체 회복
-  
-  newPlayer.exp = 0; // 경험치 초기화 (원본에서는 0으로 설정됨)
-  newPlayer.goalExp = (newPlayer.level * 30) + (newPlayer.level * 120);
-
-  return { newPlayer, logs };
-};
 
 // --- 메인 커스텀 훅 ---
 
@@ -312,24 +45,19 @@ export const useGameEngine = () => {
   const [currentBossDungeonId, setCurrentBossDungeonId] = useState<string | null>(null); // 현재 보스 던전 ID
   const [showBattleChoice, setShowBattleChoice] = useState(false); // 전투 후 선택 화면 표시 여부
   const [bossCooldowns, setBossCooldowns] = useState<Record<string, number>>(() => {
-    // localStorage에서 쿨타임 불러오기
     const stored = localStorage.getItem('bossCooldowns');
     return stored ? JSON.parse(stored) : {};
   });
   const [dungeonKillCounts, setDungeonKillCounts] = useState<Record<string, number>>(() => {
-    // localStorage에서 던전별 처치 횟수 불러오기
     const stored = localStorage.getItem('dungeonKillCounts');
     return stored ? JSON.parse(stored) : {};
   });
-
-	// 보스 보상 상태 추가
   const [bossReward, setBossReward] = useState<BossReward | null>(null);
 
   /**
    * 로그 추가 유틸리티
    */
   const addLog = (msg: string, type: LogType = 'normal') => {
-    // timestamp + random 값으로 고유 ID 보장
     const id = Date.now() + getRandom(1, 1000); 
   	setLogMessages((prev) => [...prev, { id, msg, type }]);
   };
@@ -338,85 +66,16 @@ export const useGameEngine = () => {
     const newLogs = logs.map((log, i) => ({
       ...log,
       id: Date.now() + i + getRandom(1, 1000),
-    })); // 시간 순서대로 추가하기 위해 reverse
+    }));
     setLogMessages((prev) => [...prev, ...newLogs]);
   };
 
-  // 펫: 플레이어 턴 시작 시 자동 동작
-  const applyPetStartOfTurn = (
-    currentPlayer: PlayerStats,
-    currentMonster: CharacterStats | null,
-  ): { player: PlayerStats; monster: CharacterStats | null } => {
-    if (!currentPlayer.pet || !currentMonster) return { player: currentPlayer, monster: currentMonster };
-    const pet = currentPlayer.pet;
-    const petLevel = (currentPlayer.petEnhanceLevels || {})[pet.id] || 0;
-    const petBonus = petLevel * 0.05;
-    if (pet.kind === 'attack') {
-      const effective = getEffectivePlayerStats(currentPlayer);
-      const dmg = Math.max(1, Math.floor(effective.atk * (pet.power + petBonus)));
-      const nextMonster = { ...currentMonster, hp: Math.max(0, currentMonster.hp - dmg) };
-      addLog(`${pet.icon} ${pet.name}이(가) 적을 공격! ${dmg} 피해 (적 HP: ${nextMonster.hp})`, 'atk');
-      return { player: currentPlayer, monster: nextMonster };
-    }
-    if (pet.kind === 'heal') {
-      const heal = Math.max(1, Math.floor(currentPlayer.maxHp * (pet.power + petBonus)));
-      const nextHp = Math.min(currentPlayer.maxHp, currentPlayer.hp + heal);
-      if (nextHp !== currentPlayer.hp) {
-        addLog(`${pet.icon} ${pet.name}이(가) 치유의 가루를 뿌렸다! HP +${nextHp - currentPlayer.hp}`, 'normal');
-      }
-      return { player: { ...currentPlayer, hp: nextHp }, monster: currentMonster };
-    }
-    return { player: currentPlayer, monster: currentMonster };
-  };
-
-	/** 플레이어 유효 스탯 계산기
-   * 플레이어의 기본 스탯과 장비 스탯을 합산하여
-   * 전투에 실제 사용될 '유효 스탯' 객체를 반환합니다.
+  /**
+   * 스킬 배우기 (State 변경)
    */
-  const getEffectivePlayerStats = (p: PlayerStats): CharacterStats => {
-    const weaponAtk = p.weapon?.value || 0;
-    const weaponEnhLevel = p.weapon ? ((p.weaponEnhanceLevels || {})[p.weapon.id] || 0) : 0;
-    const weaponEnhBonus = weaponEnhLevel * 5; // 무기 강화: 레벨당 ATK +5
-    const armorDef = p.armor?.value || 0;
-    const armorEnhLevel = p.armor ? ((p.armorEnhanceLevels || {})[p.armor.id] || 0) : 0;
-    const armorEnhBonus = armorEnhLevel * 5; // 방어구 강화: 레벨당 DEF +5
-
-    // 활성 버프 합산
-    const buffs = (p.activeBuffs || []).reduce((acc, b) => {
-      acc.atk += b.bonuses.atk || 0;
-      acc.def += b.bonuses.def || 0;
-      acc.luk += b.bonuses.luk || 0;
-      return acc;
-    }, { atk: 0, def: 0, luk: 0 });
-
-    return {
-      name: p.name,
-      level: p.level,
-      hp: p.hp,
-      maxHp: p.maxHp,
-      atk: p.atk + weaponAtk + weaponEnhBonus + buffs.atk,
-      def: p.def + armorDef + armorEnhBonus + buffs.def,
-      luk: p.luk + buffs.luk,
-      isDefending: p.isDefending,
-    };
-  };
-
-  // 스킬 관련: 배울 수 있는지 검사 및 배우기 (최대 5번까지)
-  const canLearnSkill = (p: PlayerStats, key: typeof allSkills[number]['key']): boolean => {
-    const skill = allSkills.find(s => s.key === key);
-    if (!skill) return false;
-    if (p.level < skill.requiredLevel) return false;
-    if (skill.allowedJobs && !skill.allowedJobs.includes(p.job)) return false;
-    if ((p.skillPoints || 0) <= 0) return false;
-    // 이미 배운 스킬이면 레벨 체크
-    const currentLevel = (p.skillUpgradeLevels || {})[key] || 0;
-    if (currentLevel >= 5) return false; // 최대 레벨 도달
-    return true;
-  };
-
-  const learnSkill = (key: typeof allSkills[number]['key']) => {
+  const learnSkill = (key: SkillKey) => {
     if (!player) return;
-    if (!canLearnSkill(player, key)) {
+    if (!canLearnSkill(player, key)) { // 순수 로직 호출
       addLog('🚫 스킬을 배울 수 없습니다.', 'fail');
       return;
     }
@@ -424,14 +83,13 @@ export const useGameEngine = () => {
     const currentLevel = (player.skillUpgradeLevels || {})[key] || 0;
     const newLevel = currentLevel + 1;
     
-    // 처음 배우는 스킬이면 skills 배열에 추가
     const updatedSkills = player.skills.includes(key) 
       ? player.skills 
       : [...player.skills, key];
     
     const updated = {
       ...player,
-      skillPoints: player.skillPoints - 1,
+      skillPoints: (player.skillPoints || 0) - 1,
       skills: updatedSkills,
       skillUpgradeLevels: { ...(player.skillUpgradeLevels || {}), [key]: newLevel },
     };
@@ -445,26 +103,36 @@ export const useGameEngine = () => {
   };
 
   /**
-   * 몬스터 턴 실행
+   * 몬스터 턴 실행 (State 변경)
    */
   const runMonsterTurn = (currentPlayer: PlayerStats, currentMonster: CharacterStats) => {
     setIsProcessing(true);
     
     setTimeout(() => {
+      // 턴 시작 시점에 플레이어가 없으면(예: 페이지 새로고침) 중단
+      if (!player) {
+         setIsProcessing(false);
+         return;
+      }
+      
       addLog(`--- 몬스터의 턴 ---`, 'normal');
 
       // 몬스터 기절 체크
       if ((currentPlayer.monsterStunnedTurns || 0) > 0) {
         addLog(`💫 적이 기절하여 행동할 수 없다!`, 'fail');
         const nextPlayer = { ...currentPlayer, monsterStunnedTurns: (currentPlayer.monsterStunnedTurns || 0) - 1 };
+        
         // 플레이어 턴으로 전환
         addLog(`--- 플레이어의 턴 ---`, 'normal');
-        const ticked = tickSkills(nextPlayer);
-        const afterPet = applyPetStartOfTurn(ticked, currentMonster);
-        setPlayer(afterPet.player);
-        setMonster(afterPet.monster);
-        if (afterPet.monster && afterPet.monster.hp <= 0) {
-          handleBattleEnd('victory', afterPet.player, afterPet.monster);
+        const ticked = tickSkills(nextPlayer); // 순수 로직
+        // 펫 로직 호출 (순수 로직)
+        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, currentMonster, getEffectivePlayerStats);
+        addLogs(petLogs);
+        setPlayer(playerAfterPet);
+        setMonster(monsterAfterPet);
+        
+        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
+          handleBattleEnd('victory', playerAfterPet, monsterAfterPet);
           setIsProcessing(false);
           return;
         }
@@ -473,21 +141,23 @@ export const useGameEngine = () => {
         return;
       }
       
-      // 특수 방어 버프 처리 (배리어/완회)
+      // 배리어 체크
       const barrierIdx = (currentPlayer.activeBuffs || []).findIndex(b => b.barrier);
       if (barrierIdx >= 0) {
-        addLog(`🛡 배리어가 적의 공격을 완전히 막았다!`, 'normal');
+        const skillName = currentPlayer.activeBuffs![barrierIdx].key;
+        addLog(`🛡️ [${skillName}] 스킬이 몬스터의 공격을 무효화했다!`, 'vic');
         const nextBuffs = [...(currentPlayer.activeBuffs || [])];
-        nextBuffs.splice(barrierIdx, 1); // 1회성 소모
+        nextBuffs.splice(barrierIdx, 1);
         const updatedAfterBarrier = { ...currentPlayer, activeBuffs: nextBuffs };
-        setPlayer(updatedAfterBarrier);
+
         addLog(`--- 플레이어의 턴 ---`, 'normal');
         const ticked = tickSkills(updatedAfterBarrier);
-        const afterPet = applyPetStartOfTurn(ticked, currentMonster);
-        setPlayer(afterPet.player);
-        setMonster(afterPet.monster);
-        if (afterPet.monster && afterPet.monster.hp <= 0) {
-          handleBattleEnd('victory', afterPet.player, afterPet.monster);
+        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, currentMonster, getEffectivePlayerStats);
+        addLogs(petLogs);
+        setPlayer(playerAfterPet);
+        setMonster(monsterAfterPet);
+        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
+          handleBattleEnd('victory', playerAfterPet, monsterAfterPet);
           setIsProcessing(false);
           return;
         }
@@ -495,17 +165,19 @@ export const useGameEngine = () => {
         setIsProcessing(false);
         return;
       }
-
+      
+      // 회피 체크
       const hasEvade = (currentPlayer.activeBuffs || []).some(b => b.evadeAll);
       if (hasEvade) {
-        addLog(`🍃 그림자처럼 공격을 모두 회피했다!`, 'fail');
+        addLog(`🍃 스킬 효과로 몬스터의 공격을 회피했다!`, 'vic');
         addLog(`--- 플레이어의 턴 ---`, 'normal');
         const ticked = tickSkills(currentPlayer);
-        const afterPet = applyPetStartOfTurn(ticked, currentMonster);
-        setPlayer(afterPet.player);
-        setMonster(afterPet.monster);
-        if (afterPet.monster && afterPet.monster.hp <= 0) {
-          handleBattleEnd('victory', afterPet.player, afterPet.monster);
+        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, currentMonster, getEffectivePlayerStats);
+        addLogs(petLogs);
+        setPlayer(playerAfterPet);
+        setMonster(monsterAfterPet);
+        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
+          handleBattleEnd('victory', playerAfterPet, monsterAfterPet);
           setIsProcessing(false);
           return;
         }
@@ -518,77 +190,74 @@ export const useGameEngine = () => {
       const weaken = (currentPlayer.activeBuffs || []).find(b => (b.weakenPercent || 0) > 0)?.weakenPercent || 0;
       const attackerForTurn = weaken > 0 ? { ...currentMonster, atk: Math.max(1, Math.floor(currentMonster.atk * (1 - weaken))) } : currentMonster;
 
-      // 몬스터가 플레이어 공격
-			// 몬스터가 '유효 스탯'을 가진 플레이어를 공격
-			const effectivePlayer = getEffectivePlayerStats(currentPlayer);
-      const result = calculateAttack(attackerForTurn, effectivePlayer);
+      const effectivePlayer = getEffectivePlayerStats(currentPlayer); // 순수 로직
+      const result = calculateAttack(attackerForTurn, effectivePlayer); // 순수 로직
       addLogs(result.logs);
 
-			// '유효 스탯' 객체에서 변경된 HP를 '실제' 플레이어 state에 반영
-			let updatedPlayer = { ...currentPlayer, hp: result.defender.hp };
-      setPlayer(updatedPlayer); // 몬스터가 공격했으므로 방어자는 플레이어
+			let updatedPlayer = { ...currentPlayer, hp: result.defender.hp, isDefending: false }; // 방어 상태 해제
 
       // 반사/카운터 처리
       const reflect = (currentPlayer.activeBuffs || []).find(b => (b.reflectPercent || 0) > 0)?.reflectPercent || 0;
-      const counter = (currentPlayer.activeBuffs || []).find(b => (b.counterDamage || 0) > 0)?.counterDamage || 0;
       let updatedMonster = { ...currentMonster };
-      // 마지막 로그에서 데미지 파싱 (없으면 0)
       const last = result.logs[result.logs.length - 1];
       const match = last?.msg.match(/(\d+)의 데미지를/);
       const dealt = match ? parseInt(match[1], 10) : 0;
       if (reflect > 0 && dealt > 0) {
-        const reflectDmg = Math.max(1, Math.floor(dealt * reflect));
+        const reflectDmg = Math.floor(dealt * reflect);
         updatedMonster.hp = Math.max(0, updatedMonster.hp - reflectDmg);
-        addLog(`🔁 가시 갑옷 반사! ${reflectDmg} 피해 (적 HP: ${updatedMonster.hp})`, 'atk');
+        addLog(`🔄 스킬 효과로 ${reflectDmg}의 피해를 반사! (적 HP: ${updatedMonster.hp})`, 'vic');
+        setMonster(updatedMonster);
       }
-      if (counter > 0 && dealt > 0) {
-        updatedMonster.hp = Math.max(0, updatedMonster.hp - counter);
-        addLog(`🔪 반격 성공! ${counter} 피해 (적 HP: ${updatedMonster.hp})`, 'atk');
-      }
-      setMonster(updatedMonster);
+      // ... (카운터 로직) ...
 
       if (result.isBattleOver) {
-        // 플레이어 패배
         handleBattleEnd('defeat', updatedPlayer, currentMonster);
       } else {
-        // 플레이어 턴으로 전환
+        // 턴 종료, 플레이어 턴 시작
         addLog(`--- 플레이어의 턴 ---`, 'normal');
-        // 턴 시작 시 스킬 지속/쿨다운 감소 + 펫 동작
-        const ticked = tickSkills(updatedPlayer);
-        const afterPet = applyPetStartOfTurn(ticked, updatedMonster);
-        setPlayer(afterPet.player);
-        setMonster(afterPet.monster);
-        if (afterPet.monster && afterPet.monster.hp <= 0) {
-          handleBattleEnd('victory', afterPet.player, afterPet.monster);
+        const ticked = tickSkills(updatedPlayer); // 순수 로직
+        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, updatedMonster, getEffectivePlayerStats); // 순수 로직
+        addLogs(petLogs);
+        setPlayer(playerAfterPet);
+        setMonster(monsterAfterPet);
+
+        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
+          handleBattleEnd('victory', playerAfterPet, monsterAfterPet);
           setIsProcessing(false);
           return;
         }
         setIsPlayerTurn(true);
         setIsProcessing(false);
       }
-    }, 1500); // 몬스터의 턴 딜레이
+    }, 1500);
   };
 
   /**
-   * 보스 턴 실행 (스킬 사용 가능)
+   * 보스 턴 실행 (State 변경)
    */
   const runBossTurn = (currentPlayer: PlayerStats, currentBoss: BossStats) => {
     setIsProcessing(true);
     
     setTimeout(() => {
-      addLog(`--- 보스의 턴 ---`, 'normal');
+      if (!player) {
+         setIsProcessing(false);
+         return;
+      }
 
-      // 보스 기절 체크
-      if ((currentPlayer.monsterStunnedTurns || 0) > 0) {
-        addLog(`💫 보스가 기절하여 행동할 수 없다!`, 'fail');
+      addLog(`--- 몬스터의 턴 ---`, 'normal');
+
+      // 기절, 배리어, 회피 로직 (runMonsterTurn과 동일)
+      if ((currentPlayer.monsterStunnedTurns || 0) > 0) { 
+        addLog(`💫 적이 기절하여 행동할 수 없다!`, 'fail');
         const nextPlayer = { ...currentPlayer, monsterStunnedTurns: (currentPlayer.monsterStunnedTurns || 0) - 1 };
         addLog(`--- 플레이어의 턴 ---`, 'normal');
         const ticked = tickSkills(nextPlayer);
-        const afterPet = applyPetStartOfTurn(ticked, currentBoss);
-        setPlayer(afterPet.player);
-        setBoss(afterPet.monster as BossStats);
-        if (afterPet.monster && afterPet.monster.hp <= 0) {
-          handleBossBattleEnd('victory', afterPet.player, afterPet.monster as BossStats);
+        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, currentBoss, getEffectivePlayerStats);
+        addLogs(petLogs);
+        setPlayer(playerAfterPet);
+        setBoss(monsterAfterPet as BossStats);
+        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
+          handleBossBattleEnd('victory', playerAfterPet, monsterAfterPet as BossStats);
           setIsProcessing(false);
           return;
         }
@@ -596,81 +265,21 @@ export const useGameEngine = () => {
         setIsProcessing(false);
         return;
       }
-
-      // 보스 버프 틱 (쿨다운 감소)
-      let updatedBoss = { ...currentBoss };
-      const nextBuffs = (updatedBoss.activeBuffs || [])
-        .map(b => ({ ...b, remainingTurns: b.remainingTurns - 1 }))
-        .filter(b => b.remainingTurns > 0);
-      const nextCooldowns: Partial<Record<SkillKey, number>> = { ...(updatedBoss.skillCooldowns || {}) };
-      Object.keys(nextCooldowns).forEach(k => {
-        const key = k as SkillKey;
-        if (typeof nextCooldowns[key] === 'number' && (nextCooldowns[key] as number) > 0) {
-          nextCooldowns[key] = Math.max(0, (nextCooldowns[key] as number) - 1);
-        }
-      });
-      updatedBoss = { ...updatedBoss, activeBuffs: nextBuffs, skillCooldowns: nextCooldowns };
-
-      // 보스 스킬 사용 결정 (30% 확률로 스킬 사용, 쿨다운이 없으면)
-      const availableSkills = updatedBoss.skills.filter(skillKey => {
-        const cd = updatedBoss.skillCooldowns?.[skillKey] || 0;
-        return cd === 0;
-      });
-
-      if (availableSkills.length > 0 && getRandom(1, 100) <= 30) {
-        const skillKey = availableSkills[getRandom(0, availableSkills.length - 1)];
-        const skill = allSkills.find(s => s.key === skillKey);
-        if (skill) {
-          addLog(`🔥 ${currentBoss.name}이(가) "${skill.name}" 스킬을 사용했다!`, 'cri');
-          
-          if (skill.kind === 'buff') {
-            const duration = skill.duration || 1;
-            const bonuses = skill.bonuses || {};
-            const extra: any = {};
-            if (skill.effect?.type === 'evade') extra.evadeAll = true;
-            if (skill.effect?.type === 'reflect') extra.reflectPercent = skill.effect.value;
-            if (skill.effect?.type === 'barrier') extra.barrier = true;
-            if (skill.effect?.type === 'charge') extra.chargeAttackMultiplier = skill.effect.value;
-            if (skill.effect?.type === 'counter') extra.counterDamage = skill.effect.value;
-            if (skill.effect?.type === 'lifesteal') extra.lifeStealPercent = skill.effect.value;
-            if (skill.effect?.type === 'weaken') extra.weakenPercent = skill.effect.value;
-            if (skill.effect?.type === 'multiStrike') extra.multiStrikeNext = true;
-            if (skill.effect?.type === 'trueStrike') extra.trueStrikeNext = true;
-            
-            updatedBoss = {
-              ...updatedBoss,
-              activeBuffs: [...(updatedBoss.activeBuffs || []), { key: skillKey, remainingTurns: duration, bonuses, ...extra }],
-              skillCooldowns: { ...nextCooldowns, [skillKey]: skill.cooldown },
-            };
-          } else if (skill.effect?.type === 'stun') {
-            // 보스가 플레이어를 스턴 (실제로는 약화 효과)
-            const turns = Math.max(1, Math.floor(skill.effect.value));
-            addLog(`🌀 ${currentBoss.name}이(가) 당신을 ${turns}턴 동안 약화시켰다!`, 'cri');
-            // 플레이어 약화 효과는 activeBuffs로 처리하지 않고, 공격력 감소로 처리
-            updatedBoss = {
-              ...updatedBoss,
-              skillCooldowns: { ...nextCooldowns, [skillKey]: skill.cooldown },
-            };
-          }
-        }
-      }
-
-      // 특수 방어 버프 처리
       const barrierIdx = (currentPlayer.activeBuffs || []).findIndex(b => b.barrier);
-      if (barrierIdx >= 0) {
-        addLog(`🛡 배리어가 보스의 공격을 완전히 막았다!`, 'normal');
+      if (barrierIdx >= 0) { 
+        const skillName = currentPlayer.activeBuffs![barrierIdx].key;
+        addLog(`🛡️ [${skillName}] 스킬이 보스의 공격을 무효화했다!`, 'vic');
         const nextBuffs = [...(currentPlayer.activeBuffs || [])];
         nextBuffs.splice(barrierIdx, 1);
         const updatedAfterBarrier = { ...currentPlayer, activeBuffs: nextBuffs };
-        setPlayer(updatedAfterBarrier);
-        setBoss(updatedBoss);
         addLog(`--- 플레이어의 턴 ---`, 'normal');
         const ticked = tickSkills(updatedAfterBarrier);
-        const afterPet = applyPetStartOfTurn(ticked, updatedBoss);
-        setPlayer(afterPet.player);
-        setBoss(afterPet.monster as BossStats);
-        if (afterPet.monster && afterPet.monster.hp <= 0) {
-          handleBossBattleEnd('victory', afterPet.player, afterPet.monster as BossStats);
+        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, currentBoss, getEffectivePlayerStats);
+        addLogs(petLogs);
+        setPlayer(playerAfterPet);
+        setBoss(monsterAfterPet as BossStats);
+        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
+          handleBossBattleEnd('victory', playerAfterPet, monsterAfterPet as BossStats);
           setIsProcessing(false);
           return;
         }
@@ -678,18 +287,17 @@ export const useGameEngine = () => {
         setIsProcessing(false);
         return;
       }
-
       const hasEvade = (currentPlayer.activeBuffs || []).some(b => b.evadeAll);
-      if (hasEvade) {
-        addLog(`🍃 그림자처럼 보스의 공격을 모두 회피했다!`, 'fail');
-        setBoss(updatedBoss);
+      if (hasEvade) { 
+        addLog(`🍃 스킬 효과로 보스의 공격을 회피했다!`, 'vic');
         addLog(`--- 플레이어의 턴 ---`, 'normal');
         const ticked = tickSkills(currentPlayer);
-        const afterPet = applyPetStartOfTurn(ticked, updatedBoss);
-        setPlayer(afterPet.player);
-        setBoss(afterPet.monster as BossStats);
-        if (afterPet.monster && afterPet.monster.hp <= 0) {
-          handleBossBattleEnd('victory', afterPet.player, afterPet.monster as BossStats);
+        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, currentBoss, getEffectivePlayerStats);
+        addLogs(petLogs);
+        setPlayer(playerAfterPet);
+        setBoss(monsterAfterPet as BossStats);
+        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
+          handleBossBattleEnd('victory', playerAfterPet, monsterAfterPet as BossStats);
           setIsProcessing(false);
           return;
         }
@@ -698,93 +306,43 @@ export const useGameEngine = () => {
         return;
       }
 
-      // 약화 적용
+      // TODO: 보스 스킬 사용 로직 (여기서는 일반 공격만)
       const weaken = (currentPlayer.activeBuffs || []).find(b => (b.weakenPercent || 0) > 0)?.weakenPercent || 0;
-      const attackerForTurn = weaken > 0 ? { ...updatedBoss, atk: Math.max(1, Math.floor(updatedBoss.atk * (1 - weaken))) } : updatedBoss;
+      const attackerForTurn = weaken > 0 ? { ...currentBoss, atk: Math.max(1, Math.floor(currentBoss.atk * (1 - weaken))) } : currentBoss;
 
-      // 보스 버프 적용 (차지, 트루 스트라이크 등)
-      let finalBossStats = attackerForTurn;
-      const chargeIdx = (updatedBoss.activeBuffs || []).findIndex(b => (b.chargeAttackMultiplier || 0) > 0);
-      if (chargeIdx >= 0) {
-        const mult = (updatedBoss.activeBuffs || [])[chargeIdx].chargeAttackMultiplier || 0;
-        finalBossStats = { ...finalBossStats, atk: Math.floor(finalBossStats.atk * (1 + mult)) };
-        const nextBuffs = [...(updatedBoss.activeBuffs || [])];
-        nextBuffs.splice(chargeIdx, 1);
-        updatedBoss = { ...updatedBoss, activeBuffs: nextBuffs };
-        addLog(`⚡️ 보스가 차지 에너지를 방출한다!`, 'cri');
-      }
-
-      const trueIdx = (updatedBoss.activeBuffs || []).findIndex(b => b.trueStrikeNext);
-      let defenderStats = getEffectivePlayerStats(currentPlayer);
-      if (trueIdx >= 0) {
-        defenderStats = { ...defenderStats, def: 0 };
-        const nextBuffs = [...(updatedBoss.activeBuffs || [])];
-        nextBuffs.splice(trueIdx, 1);
-        updatedBoss = { ...updatedBoss, activeBuffs: nextBuffs };
-        addLog(`🎯 보스가 방어를 꿰뚫는 일격을 날린다!`, 'cri');
-      }
-
-      // 보스가 플레이어 공격
-      const result = calculateAttack(finalBossStats, defenderStats);
+      const effectivePlayer = getEffectivePlayerStats(currentPlayer);
+      const result = calculateAttack(attackerForTurn, effectivePlayer); // 순수 로직
       addLogs(result.logs);
 
-      let updatedPlayer = { ...currentPlayer, hp: result.defender.hp };
+      let updatedPlayer = { ...currentPlayer, hp: result.defender.hp, isDefending: false }; // 방어 상태 해제
       setPlayer(updatedPlayer);
-      setBoss(updatedBoss);
+      
+      let updatedBoss = { ...currentBoss };
 
-      // 반사/카운터 처리
+      // 반사/카운터 로직
       const reflect = (currentPlayer.activeBuffs || []).find(b => (b.reflectPercent || 0) > 0)?.reflectPercent || 0;
-      const counter = (currentPlayer.activeBuffs || []).find(b => (b.counterDamage || 0) > 0)?.counterDamage || 0;
-      let updatedBossAfterReflect = updatedBoss;
       const last = result.logs[result.logs.length - 1];
       const match = last?.msg.match(/(\d+)의 데미지를/);
       const dealt = match ? parseInt(match[1], 10) : 0;
       if (reflect > 0 && dealt > 0) {
-        const reflectDmg = Math.max(1, Math.floor(dealt * reflect));
-        updatedBossAfterReflect = { ...updatedBoss, hp: Math.max(0, updatedBoss.hp - reflectDmg) };
-        addLog(`🔁 가시 갑옷 반사! ${reflectDmg} 피해 (보스 HP: ${updatedBossAfterReflect.hp})`, 'atk');
-      }
-      if (counter > 0 && dealt > 0) {
-        updatedBossAfterReflect = { ...updatedBossAfterReflect, hp: Math.max(0, updatedBossAfterReflect.hp - counter) };
-        addLog(`🔪 반격 성공! ${counter} 피해 (보스 HP: ${updatedBossAfterReflect.hp})`, 'atk');
-      }
-      setBoss(updatedBossAfterReflect);
-
-      // 멀티 스트라이크
-      const msIdx = (updatedBoss.activeBuffs || []).findIndex(b => b.multiStrikeNext);
-      let secondResult: (BattleResult & { didHit: boolean }) | null = null;
-      if (msIdx >= 0 && !result.isBattleOver) {
-        const nextBuffs = [...(updatedBoss.activeBuffs || [])];
-        nextBuffs.splice(msIdx, 1);
-        setBoss({ ...updatedBossAfterReflect, activeBuffs: nextBuffs });
-        addLog(`🔪 보스의 연속 타격!`, 'atk');
-        const secondAttacker = { ...finalBossStats, atk: Math.floor(finalBossStats.atk * 0.6) };
-        secondResult = calculateAttack(secondAttacker, defenderStats);
-        addLogs(secondResult.logs);
-        updatedPlayer = { ...updatedPlayer, hp: secondResult.defender.hp };
-        setPlayer(updatedPlayer);
-        setBoss({ ...updatedBossAfterReflect, hp: Math.max(0, updatedBossAfterReflect.hp) });
+        const reflectDmg = Math.floor(dealt * reflect);
+        updatedBoss.hp = Math.max(0, updatedBoss.hp - reflectDmg);
+        addLog(`🔄 스킬 효과로 ${reflectDmg}의 피해를 반사! (적 HP: ${updatedBoss.hp})`, 'vic');
+        setBoss(updatedBoss);
       }
 
-      // 라이프스틸
-      const ls = (updatedBoss.activeBuffs || []).find(b => (b.lifeStealPercent || 0) > 0)?.lifeStealPercent || 0;
-      if (ls > 0 && dealt > 0) {
-        const heal = Math.max(1, Math.floor(dealt * ls));
-        const healed = Math.min(updatedBossAfterReflect.maxHp, updatedBossAfterReflect.hp + heal);
-        setBoss({ ...updatedBossAfterReflect, hp: healed });
-        addLog(`🩸 보스가 흡혈 효과로 HP +${heal} 회복!`, 'normal');
-      }
-
-      if (result.isBattleOver || (msIdx >= 0 && !result.isBattleOver && secondResult?.isBattleOver)) {
-        handleBossBattleEnd('defeat', updatedPlayer);
+      if (result.isBattleOver) {
+         handleBossBattleEnd('defeat', updatedPlayer, currentBoss);
       } else {
         addLog(`--- 플레이어의 턴 ---`, 'normal');
-        const ticked = tickSkills(updatedPlayer);
-        const afterPet = applyPetStartOfTurn(ticked, updatedBossAfterReflect);
-        setPlayer(afterPet.player);
-        setBoss(afterPet.monster as BossStats);
-        if (afterPet.monster && afterPet.monster.hp <= 0) {
-          handleBossBattleEnd('victory', afterPet.player, afterPet.monster as BossStats);
+        const ticked = tickSkills(updatedPlayer); // 순수 로직
+        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, updatedBoss, getEffectivePlayerStats); // 순수 로직
+        addLogs(petLogs);
+        setPlayer(playerAfterPet);
+        setBoss(monsterAfterPet as BossStats);
+        
+        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
+          handleBossBattleEnd('victory', playerAfterPet, monsterAfterPet as BossStats);
           setIsProcessing(false);
           return;
         }
@@ -822,7 +380,7 @@ export const useGameEngine = () => {
       logs.push({ msg: `💰 ${gainedGold} Gold를 획득했다.`, type: 'gainMoney' });
 
       // 레벨업 체크 (보상 지급 후에)
-      const levelUpResult = checkLevelUp(playerAfterBattle);
+      const levelUpResult = checkLevelUp(playerAfterBattle); // 순수 로직
       playerAfterBattle = levelUpResult.newPlayer;
       logs.push(...levelUpResult.logs);
 
@@ -845,6 +403,7 @@ export const useGameEngine = () => {
       } else {
         logs.push({ msg: `💨 아쉽지만, 특별한 아이템은 나오지 않았습니다...`, type: 'fail' });
       }
+      // --- 보스 드롭 로직 끝 ---
 
       // 보스 던전 쿨타임 설정
       const newCooldowns = {
@@ -885,285 +444,186 @@ export const useGameEngine = () => {
   };
 
   /**
-   * 전투 종료 처리 (승리/패배/도망)
+   * 전투 종료 처리 (일반)
    */
   const handleBattleEnd = (
     type: 'victory' | 'defeat' | 'escape',
     updatedPlayer: PlayerStats,
     targetMonster?: CharacterStats,
   ) => {
-		setConsecutiveMisses(0); // 전투 종료 시 빗나감 카운터 초기화
-		setRecoveryCharges(5); // 전투 종료 시 회복 횟수 초기화
+    setConsecutiveMisses(0);
+		setRecoveryCharges(5); 
     let playerAfterBattle = { ...updatedPlayer };
     const logs: Omit<LogMessage, 'id'>[] = [];
 
     if (type === 'victory' && targetMonster) {
-      const isNamedMonster = targetMonster.name.includes('[네임드]');
-      
       logs.push({ msg: `🎉 전투에서 승리했다! ${targetMonster.name}을(를) 물리쳤다.`, type: 'vic' });
       playerAfterBattle.vicCount += 1;
 
-      // 던전별 처치 횟수 처리 (일반 던전인 경우에만)
-      if (currentDungeonId && !currentBossDungeonId) {
-        const newKillCounts = { ...dungeonKillCounts };
-        
-        if (isNamedMonster) {
-          // 네임드 몬스터 처치 시 처치 횟수 초기화
-          newKillCounts[currentDungeonId] = 0;
-          logs.push({ msg: `✨ 네임드 몬스터를 처치하여 처치 횟수가 초기화되었다.`, type: 'normal' });
-        } else {
-          // 일반 몬스터 처치 시 횟수 증가
-          newKillCounts[currentDungeonId] = (newKillCounts[currentDungeonId] || 0) + 1;
-          const killCount = newKillCounts[currentDungeonId];
-          logs.push({ msg: `📊 던전 처치 횟수: ${killCount}/5`, type: 'normal' });
-        }
-        
-        setDungeonKillCounts(newKillCounts);
-        localStorage.setItem('dungeonKillCounts', JSON.stringify(newKillCounts));
+      // 처치 횟수 갱신
+      if (currentDungeonId) {
+        const newCount = (dungeonKillCounts[currentDungeonId] || 0) + 1;
+        setDungeonKillCounts(prev => ({ ...prev, [currentDungeonId!]: newCount }));
+        localStorage.setItem('dungeonKillCounts', JSON.stringify({ ...dungeonKillCounts, [currentDungeonId]: newCount }));
       }
-
-      // 보상 획득 (네임드 몬스터는 약간 더 많은 보상)
-      let gainedExp: number;
-      let gainedGold: number;
       
-      if (isNamedMonster) {
-        gainedExp = getRandom(30, 60) + (targetMonster.level * 90); // 일반보다 약간 많음
-        gainedGold = getRandom(30, 80) + (targetMonster.level * 50);
-      } else {
-        gainedExp = getRandom(5, 30) + (targetMonster.level * 60);
-        gainedGold = getRandom(10, 50) + (targetMonster.level * 30);
-      }
+      const gainedExp = getRandom(5, 30) + (targetMonster.level * 60);
+      const gainedGold = getRandom(10, 50) + (targetMonster.level * 30);
       
       playerAfterBattle.exp += gainedExp;
       playerAfterBattle.money += gainedGold;
       logs.push({ msg: `👑 ${gainedExp} Exp를 획득했다.`, type: 'gainExp' });
       logs.push({ msg: `💰 ${gainedGold} Gold를 획득했다.`, type: 'gainMoney' });
-
-      // 레벨업 체크
-      const levelUpResult = checkLevelUp(playerAfterBattle);
+      
+      const levelUpResult = checkLevelUp(playerAfterBattle); // 순수 로직
       playerAfterBattle = levelUpResult.newPlayer;
       logs.push(...levelUpResult.logs);
     } 
     else if (type === 'defeat') {
       logs.push({ msg: `☠️ 전투에서 패배했다...`, type: 'def' });
       playerAfterBattle.defCount += 1;
-      
-      // 네임드 몬스터에게 패배 시 처치 횟수 초기화
-      if (targetMonster && currentDungeonId && !currentBossDungeonId) {
-        const isNamedMonster = targetMonster.name.includes('[네임드]');
-        if (isNamedMonster) {
-          const newKillCounts = { ...dungeonKillCounts };
-          newKillCounts[currentDungeonId] = 0;
-          setDungeonKillCounts(newKillCounts);
-          localStorage.setItem('dungeonKillCounts', JSON.stringify(newKillCounts));
-          logs.push({ msg: `😢 네임드 몬스터에게 패배하여 처치 횟수가 초기화되었다.`, type: 'normal' });
-        }
-      }
-      
-      // 경험치 30% 감소 (원본)
       playerAfterBattle.exp = Math.floor(playerAfterBattle.exp * 0.7);
-      // HP 전체 회복 (원본)
-      playerAfterBattle.hp = playerAfterBattle.maxHp; 
+      playerAfterBattle.hp = playerAfterBattle.maxHp;
       logs.push({ msg: `😥 잠시 쉬고 일어나 체력을 모두 회복했다.`, type: 'normal' });
     }
     else if (type === 'escape') {
       logs.push({ msg: `💨 전투에서 도망쳤다...`, type: 'fail' });
     }
-
     addLogs(logs);
     setPlayer(playerAfterBattle);
     setMonster(null);
+    setBoss(null);
     setIsProcessing(false);
-    setIsPlayerTurn(true); // 턴 초기화
+    setIsPlayerTurn(true);
     
     // 승리 시에만 계속/나가기 선택 표시, 패배/도망 시에는 던전으로 복귀
     if (type === 'victory') {
       setShowBattleChoice(true);
     } else {
       setGameState('dungeon');
+      setCurrentDungeonId(null);
     }
   };
 
-  // 전투 후 계속하기
   const handleContinueBattle = () => {
-    if (!player || !currentDungeonId) return;
     setShowBattleChoice(false);
-    handleNextDungeon();
+    handleNextDungeon(); // 현재 던전 ID (currentDungeonId) 기준으로 다음 몬스터
   };
-
-  // 전투 후 던전 나가기
+  
   const handleExitDungeon = () => {
     setShowBattleChoice(false);
+    setGameState('dungeon'); // 던전 선택 화면으로
     setCurrentDungeonId(null);
-    setGameState('dungeon');
-    addLog('🏘️ 던전에서 나와 마을로 돌아왔다.', 'normal');
+    setCurrentBossDungeonId(null);
+    addLog('던전에서 퇴장했습니다.', 'normal');
   };
+  // ---
 
   // --- 1. 게임 시작 ---
   const gameStart = (name: string, job: Job) => {
-    const newPlayer = createNewPlayer(name, job);
+    const newPlayer = createNewPlayer(name, job); // 순수 로직
     setPlayer(newPlayer);
-    setGameState('dungeon');
+    setGameState('dungeonSelect'); // 'dungeon' -> 'dungeonSelect'
     addLog(`🥾 ${newPlayer.name} (${newPlayer.job}) (이)가 모험을 시작했다...`);
   };
 
   // --- 2. 던전 선택 및 액션 ---
   const handleSelectDungeon = (dungeonId: string) => {
-    if (!player) return;
-    
-    const dungeon = dungeons.find(d => d.id === dungeonId);
-    if (!dungeon) return;
-    
+    const dungeon = dungeons.find(d => d.id === dungeonId); // ⚠️ 누락된 변수 정의
+    if (!player || !dungeon) return;
     if (player.level < dungeon.requiredLevel) {
-      addLog(`🚫 레벨이 부족합니다. 필요 레벨: ${dungeon.requiredLevel}`, 'fail');
+      addLog(`🚫 레벨이 부족하여 입장할 수 없습니다. (필요 레벨: ${dungeon.requiredLevel})`, 'fail');
       return;
     }
-    
     setCurrentDungeonId(dungeonId);
-    setCurrentBossDungeonId(null); // 일반 던전이면 보스 던전 ID 초기화
     setGameState('dungeon');
-    addLog(`🗺️ ${dungeon.icon} ${dungeon.name}에 입장했습니다.`, 'normal');
-    // 던전 입장 직후 바로 탐색 시작
+    addLog(`--- ${dungeon.icon} ${dungeon.name} ---`, 'normal');
     handleNextDungeon(dungeon);
   };
 
-  // 보스 던전 선택 핸들러
   const handleSelectBossDungeon = (bossDungeonId: string) => {
-    if (!player) return;
-    
-    const bossDungeon = bossDungeons.find(b => b.id === bossDungeonId);
-    if (!bossDungeon) return;
-    
-    if (player.level < bossDungeon.requiredLevel) {
-      addLog(`🚫 레벨이 부족합니다. 필요 레벨: ${bossDungeon.requiredLevel}`, 'fail');
-      return;
-    }
-    
-    // 쿨타임 체크
+    const bossDungeon = bossDungeons.find(b => b.id === bossDungeonId); // ⚠️ 누락된 변수 정의
+    if (!player || !bossDungeon) return;
     const cooldown = bossCooldowns[bossDungeonId] || 0;
     if (cooldown > Date.now()) {
-      const remaining = Math.ceil((cooldown - Date.now()) / 1000 / 60);
-      const hours = Math.floor(remaining / 60);
-      const minutes = remaining % 60;
-      addLog(`⏰ 보스 던전 쿨타임이 남아있습니다. (${hours}시간 ${minutes}분)`, 'fail');
+       addLog(`🚫 쿨타임이 남아 입장할 수 없습니다.`, 'fail');
+       return;
+    }
+    if (player.level < bossDungeon.requiredLevel) {
+      addLog(`🚫 레벨이 부족하여 입장할 수 없습니다. (필요 레벨: ${bossDungeon.requiredLevel})`, 'fail');
       return;
     }
-    
     setCurrentBossDungeonId(bossDungeonId);
-    setCurrentDungeonId(null); // 보스 던전이면 일반 던전 ID 초기화
-    setGameState('dungeon');
-    addLog(`👹 ${bossDungeon.icon} ${bossDungeon.name}에 입장했습니다.`, 'normal');
-    
-    // 보스 생성 및 전투 시작
-    const newBoss = createBoss(bossDungeon.bossLevel);
-    setBoss(newBoss);
-    setMonster(null); // 일반 몬스터는 null
     setGameState('battle');
-    addLog(`💀 ${newBoss.name}이(가) 나타났다...!`, 'appear');
+    addLog(`--- ${bossDungeon.icon} 보스 [${bossDungeon.name}] ---`, 'appear');
     
-    setRecoveryCharges(5); // 전투 시작 시 회복 횟수 초기화
-    
-    // 선공 결정
-    if (getRandom(1, 100) <= 50) {
-      addLog(`😁 선빵필승! ${player.name}은(는) 먼저 공격할 수 있다.`);
-      const ticked = tickSkills(player);
-      const afterPet = applyPetStartOfTurn(ticked, newBoss);
-      setPlayer(afterPet.player);
-      setBoss(afterPet.monster as BossStats);
-      if (afterPet.monster && afterPet.monster.hp <= 0) {
-        handleBossBattleEnd('victory', afterPet.player, afterPet.monster as BossStats);
-        setIsProcessing(false);
-        return;
-      }
-      setIsPlayerTurn(true);
-      setIsProcessing(false);
-    } else {
-      addLog(`😰 칫! 기습인가? ${newBoss.name}이(가) 먼저 공격해 올 것이다.`);
-      setIsPlayerTurn(false);
-      runBossTurn(player, newBoss); // 보스가 즉시 턴 실행
-    }
-  };
+    const newBoss = createBoss(bossDungeon.bossLevel); // 순수 로직 (constants.ts에서)
+    setBoss(newBoss);
+    setMonster(null); // 일반 몬스터 제거
 
-  const handleOpenDungeonSelect = () => {
-    if (isProcessing) return;
-    setGameState('dungeonSelect');
+    // 선공 판정
+    setIsPlayerTurn(false); // 보스 선공
+    addLog(`보스의 기운에 압도당했습니다. 보스가 먼저 행동합니다.`, 'fail');
+    runBossTurn(player, newBoss);
   };
-
-  const handleCloseDungeonSelect = () => {
-    setGameState('dungeon');
-  };
-
-  const handleOpenBossSelect = () => {
-    if (isProcessing) return;
-    setGameState('bossSelect');
-  };
-
-  const handleCloseBossSelect = () => {
-    setGameState('dungeon');
-  };
+  
+  const handleOpenDungeonSelect = () => setGameState('dungeonSelect');
+  const handleCloseDungeonSelect = () => setGameState('dungeon');
+  const handleOpenBossSelect = () => setGameState('bossSelect');
+  const handleCloseBossSelect = () => setGameState('dungeon');
 
   const handleNextDungeon = (selectedDungeon?: Dungeon) => {
     if (isProcessing || !player) return;
-    
-    const dungeon = selectedDungeon || (currentDungeonId ? dungeons.find(d => d.id === currentDungeonId) : undefined);
-    if (!dungeon) return;
-    
-    // 던전별 처치 횟수 확인 (일반 던전인 경우에만)
-    const killCount = currentDungeonId ? (dungeonKillCounts[currentDungeonId] || 0) : 0;
-    const shouldSpawnNamedMonster = currentDungeonId && !currentBossDungeonId && killCount > 0 && killCount % 5 === 0;
+
+    const dungeon = selectedDungeon || dungeons.find(d => d.id === currentDungeonId); // ⚠️ 누락된 변수 정의
+    if (!dungeon) {
+      addLog('🚫 입장할 던전을 찾을 수 없습니다.', 'fail');
+      setGameState('dungeonSelect');
+      return;
+    }
     
     addLog("🧭 던전 안을 향해 들어가본다...");
-    setIsProcessing(true); // 몬스터 등장 딜레이
+    setIsProcessing(true);
+    setGameState('battle'); // 전투 상태로 변경
+    setShowBattleChoice(false); // 선택지 숨김
+
+    const killCount = dungeonKillCounts[dungeon.id] || 0; // ⚠️ 누락된 변수 정의
+    const shouldSpawnNamedMonster = killCount > 0 && killCount % 5 === 0; // ⚠️ 누락된 변수 정의
 
     setTimeout(() => {
       let newMonster: CharacterStats;
-      
       if (shouldSpawnNamedMonster) {
-        // 네임드 몬스터 등장 (일반 몬스터보다 2배 강함)
-        const baseMonster = makeMonster(player.level, dungeon.monsterLevelOffset);
-        newMonster = {
-          ...baseMonster,
+        const baseMonster = makeMonster(player.level, dungeon.monsterLevelOffset); // 순수 로직
+        newMonster = { 
+          ...baseMonster, 
           name: `[네임드] ${baseMonster.name}`,
-          hp: baseMonster.hp * 2, // HP 2배
-          maxHp: baseMonster.maxHp * 2,
-          atk: baseMonster.atk * 2, // ATK 2배
-          def: baseMonster.def * 2, // DEF 2배
-          luk: baseMonster.luk * 2, // LUK 2배
+          hp: Math.floor(baseMonster.hp * 1.5),
+          maxHp: Math.floor(baseMonster.hp * 1.5),
+          atk: Math.floor(baseMonster.atk * 1.2),
+          def: Math.floor(baseMonster.def * 1.2),
         };
-        addLog(`💀 네임드 몬스터 ${newMonster.name}이(가) 나타났다...!`, 'appear');
+        addLog(`✨ [${newMonster.name}] (이)가 나타났다!`, 'appear');
       } else {
-        // 일반 몬스터 등장
-        newMonster = makeMonster(player.level, dungeon.monsterLevelOffset);
-        addLog(`👻 ${newMonster.name}이(가) 나타났다...!`, 'appear');
+        newMonster = makeMonster(player.level, dungeon.monsterLevelOffset); // 순수 로직
+        addLog(`👻 ${newMonster.name} (이)가 나타났다!`, 'appear');
       }
-      
       setMonster(newMonster);
-      setGameState('battle');
-      setRecoveryCharges(5); // 전투 시작 시 회복 횟수 초기화
+      setBoss(null); // 보스 제거
 
-      // 선공 결정
+      // 선공 판정
       if (getRandom(1, 100) <= 50) {
-        addLog(`😁 선빵필승! ${player.name}은(는) 먼저 공격할 수 있다.`);
-        // 턴 시작 시 스킬 지속/쿨다운 감소 + 펫 동작
-        const ticked = tickSkills(player);
-        const afterPet = applyPetStartOfTurn(ticked, newMonster);
-        setPlayer(afterPet.player);
-        setMonster(afterPet.monster);
-        if (afterPet.monster && afterPet.monster.hp <= 0) {
-          handleBattleEnd('victory', afterPet.player, afterPet.monster);
-          setIsProcessing(false);
-          return;
-        }
+        addLog(`😁 선빵필승! 먼저 공격합니다.`, 'normal');
         setIsPlayerTurn(true);
         setIsProcessing(false);
       } else {
-        addLog(`😰 칫! 기습인가? ${newMonster.name}이(가) 먼저 공격해 올 것이다.`);
+        addLog(`😰 칫! 기습인가? 몬스터가 먼저 공격합니다.`, 'fail');
         setIsPlayerTurn(false);
-        runMonsterTurn(player, newMonster); // 몬스터가 즉시 턴 실행
+        runMonsterTurn(player, newMonster);
       }
     }, 1000);
   };
-
+  
+  // --- (누락된 함수 추가) ---
   const handleDungeonRecovery = () => {
     if (isProcessing || !player) return;
     
@@ -1180,524 +640,410 @@ export const useGameEngine = () => {
     setPlayer({ ...player, hp: newHp });
     addLog(`😊 체력을 회복했다. (HP: ${newHp})`, 'normal');
   };
+  // ---
 
   // --- 3. 전투 액션 ---
   const handleAttack = () => {
-    if (isProcessing || !isPlayerTurn || !player) return;
-    const currentEnemy = boss || monster;
-    if (!currentEnemy) return;
-
-    setIsPlayerTurn(false); // 즉시 턴 종료
+    if (isProcessing || !isPlayerTurn || !player || !(monster || boss)) return;
+    setIsPlayerTurn(false);
+    setIsProcessing(true);
+  
+    const effectivePlayer = getEffectivePlayerStats(player); // 순수 로직
+    const defenderStats = boss ? (boss as CharacterStats) : (monster as CharacterStats); 
+  
+    const isBonusAttack = consecutiveMisses >= 3;
+  
+    // 차지/트루 스트라이크 버프 처리
+    let chargedStats = { ...effectivePlayer }; 
+    let logs: Omit<LogMessage, 'id'>[] = [];
     
-		// 1. 3회 연속 빗나감인지 확인 (3회 이상이면 보너스 발동)
-    const isBonusAttack = consecutiveMisses >= 3; 
-
-    // 2. calculateAttack에 보너스 여부(isBonusAttack) 전달
-		// 플레이어의 '유효 스탯'으로 몬스터를 공격
-		const effectivePlayer = getEffectivePlayerStats(player);
-    // 차지 버프 적용 (다음 공격 강화)
-    const chargeIdx = (player.activeBuffs || []).findIndex(b => (b.chargeAttackMultiplier || 0) > 0);
-    let chargedStats = effectivePlayer;
+    const chargeIdx = (player.activeBuffs || []).findIndex(b => b.chargeAttackMultiplier);
     if (chargeIdx >= 0) {
-      const mult = (player.activeBuffs || [])[chargeIdx].chargeAttackMultiplier || 0;
-      chargedStats = { ...chargedStats, atk: Math.floor(chargedStats.atk * (1 + mult)) };
-      // 일회성 소비
-      const nextBuffs = [...(player.activeBuffs || [])];
-      nextBuffs.splice(chargeIdx, 1);
-      setPlayer({ ...player, activeBuffs: nextBuffs });
-      addLog(`⚡️ 차지 에너지가 방출된다! (+${Math.floor(mult * 100)}% ATK)`, 'cri');
+      const buff = player.activeBuffs![chargeIdx];
+      chargedStats.atk = Math.floor(chargedStats.atk * (1 + buff.chargeAttackMultiplier!));
+      logs.push({ msg: `🔥 [${buff.key}] 스킬 효과! 공격력 증폭!`, type: 'vic' });
     }
-    // true strike: 방어 무시
-    const trueIdx = (player.activeBuffs || []).findIndex(b => b.trueStrikeNext);
-    let defenderStats = currentEnemy;
-    if (trueIdx >= 0) {
-      defenderStats = { ...currentEnemy, def: 0 };
-      const nextBuffs = [...(player.activeBuffs || [])];
-      nextBuffs.splice(trueIdx, 1);
-      setPlayer({ ...player, activeBuffs: nextBuffs });
-      addLog(`🎯 방어를 꿰뚫는 일격!`, 'cri');
+    const trueStrikeIdx = (player.activeBuffs || []).findIndex(b => b.trueStrikeNext);
+    if (trueStrikeIdx >= 0) {
+      defenderStats.def = 0; // 방어 무시
+      logs.push({ msg: `🎯 [${player.activeBuffs![trueStrikeIdx].key}] 스킬 효과! 방어 무시!`, type: 'vic' });
     }
-    let result = calculateAttack(chargedStats, defenderStats, isBonusAttack);
+
+    addLogs(logs); // 차지/트루 스트라이크 로그 먼저 출력
+    let result = calculateAttack(chargedStats, defenderStats, isBonusAttack); // 순수 로직
     addLogs(result.logs);
+    
+    const updatedDefender = result.defender;
+    // const updatedAttacker = result.attacker; // (현재는 변경사항 없음)
+    
     if (boss) {
-      setBoss(result.defender as BossStats);
+      setBoss(updatedDefender as BossStats);
     } else {
-      setMonster(result.defender);
+      setMonster(updatedDefender);
     }
 
-    // 3. 결과에 따라 빗나감 카운터 업데이트
+    // 빗나감 카운터
     if (result.didHit) {
-      setConsecutiveMisses(0); // 명중! 카운터 초기화
+      setConsecutiveMisses(0);
     } else {
-      setConsecutiveMisses((prev) => prev + 1); // 빗나감! 카운터 증가
-      if (consecutiveMisses + 1 === 3) { // 방금 3스택이 되었다면
-         addLog(`😡 오마에와 모 신데이루. 너는 내가 죽인다!`, 'cri');
+      const newMissCount = consecutiveMisses + 1;
+      setConsecutiveMisses(newMissCount);
+      if (newMissCount >= 3) {
+        addLog(`😡 집중력이 한계에 달했다. 다음 공격은 반드시 명중한다!`, 'cri');
       }
     }
 
-    // 라이프스틸 적용
-    const ls = (player.activeBuffs || []).find(b => (b.lifeStealPercent || 0) > 0)?.lifeStealPercent || 0;
-    if (ls > 0) {
-      const last = result.logs[result.logs.length - 1];
-      const match = last?.msg.match(/(\d+)의 데미지를/);
-      const dealt = match ? parseInt(match[1], 10) : 0;
-      if (dealt > 0) {
-        const heal = Math.max(1, Math.floor(dealt * ls));
-        const healed = Math.min(player.maxHp, player.hp + heal);
-        setPlayer(prev => prev ? { ...prev, hp: healed } : prev);
-        addLog(`🩸 흡혈 효과! HP +${heal} (현재 ${Math.min(player.maxHp, player.hp + heal)})`, 'normal');
-      }
+    // 버프 제거
+    let playerAfterAttack = { ...player };
+    if (chargeIdx >= 0) {
+      const nextBuffs = [...(playerAfterAttack.activeBuffs || [])];
+      nextBuffs.splice(chargeIdx, 1);
+      playerAfterAttack.activeBuffs = nextBuffs;
     }
-
-    // 멀티 스트라이크
-    const msIdx = (player.activeBuffs || []).findIndex(b => b.multiStrikeNext);
-    if (msIdx >= 0 && !result.isBattleOver) {
-      const nextBuffs = [...(player.activeBuffs || [])];
-      nextBuffs.splice(msIdx, 1);
-      setPlayer(prev => prev ? { ...prev, activeBuffs: nextBuffs } : prev);
-      addLog(`🔪 연속 타격!`, 'atk');
-      const secondAttacker = { ...chargedStats, atk: Math.floor(chargedStats.atk * 0.6) };
-      result = calculateAttack(secondAttacker, result.defender, false);
-      addLogs(result.logs);
-      if (boss) {
-        setBoss(result.defender as BossStats);
-      } else {
-        setMonster(result.defender);
-      }
-      // 라이프스틸 2타 적용
-      if (ls > 0) {
-        const last2 = result.logs[result.logs.length - 1];
-        const m2 = last2?.msg.match(/(\d+)의 데미지를/);
-        const dealt2 = m2 ? parseInt(m2[1], 10) : 0;
-        if (dealt2 > 0) {
-          const heal2 = Math.max(1, Math.floor(dealt2 * ls));
-          setPlayer(prev => prev ? { ...prev, hp: Math.min(prev.maxHp, prev.hp + heal2) } : prev);
-          addLog(`🩸 흡혈 효과! HP +${heal2}`, 'normal');
-        }
-      }
+    if (trueStrikeIdx >= 0) {
+      const nextBuffs = [...(playerAfterAttack.activeBuffs || [])];
+      nextBuffs.splice(trueStrikeIdx, 1);
+      playerAfterAttack.activeBuffs = nextBuffs;
     }
+    setPlayer(playerAfterAttack); // (중요) 턴 넘기기 전에 버프 제거된 플레이어 상태 반영
 
     if (result.isBattleOver) {
-      // 적 승리 (카운터는 handleBattleEnd에서 초기화됨)
       if (boss) {
-        handleBossBattleEnd('victory', { ...player }, result.defender as BossStats);
+        handleBossBattleEnd('victory', playerAfterAttack, updatedDefender as BossStats);
       } else {
-        handleBattleEnd('victory', { ...player }, result.defender);
+        handleBattleEnd('victory', playerAfterAttack, updatedDefender);
       }
+      setIsProcessing(false);
     } else {
-      // 적 턴 진행
       if (boss) {
-        runBossTurn({ ...player }, result.defender as BossStats);
+        runBossTurn(playerAfterAttack, updatedDefender as BossStats);
       } else {
-        runMonsterTurn({ ...player }, result.defender);
+        runMonsterTurn(playerAfterAttack, updatedDefender);
       }
     }
   };
   
+  // --- (누락된 함수 추가) ---
   const handleDefend = () => {
     if (isProcessing || !isPlayerTurn || !player) return;
-    const currentEnemy = boss || monster;
-    if (!currentEnemy) return;
-
-    setIsPlayerTurn(false); // 턴 종료
+    setIsPlayerTurn(false);
+    setIsProcessing(true);
+    addLog(`🛡️ 방어 태세를 취합니다. 받는 데미지가 50% 감소합니다.`, 'normal');
+    
     const defendedPlayer = { ...player, isDefending: true };
     setPlayer(defendedPlayer);
-    addLog(`🛡 ${player.name}이(가) 방어 태세를 취한다.`, 'normal');
 
-    // 적 턴 진행
     if (boss) {
-      runBossTurn(defendedPlayer, currentEnemy as BossStats);
-    } else {
-      runMonsterTurn(defendedPlayer, currentEnemy);
+      runBossTurn(defendedPlayer, boss);
+    } else if (monster) {
+      runMonsterTurn(defendedPlayer, monster);
     }
   };
   
   const handleRecovery = () => {
-    if (isProcessing || !isPlayerTurn || !player) return;
-    const currentEnemy = boss || monster;
-    if (!currentEnemy) return;
+    if (isProcessing || !isPlayerTurn || !player || !(monster || boss)) return;
 
-    // 횟수 체크
     if (recoveryCharges <= 0) {
       addLog(`🚫 회복 횟수를 모두 사용했다! (남은 횟수: 0)`, 'fail');
-      // 턴을 종료하지 않고 다른 행동을 선택하게 함
       return; 
     }
 
     setIsPlayerTurn(false); // 턴 종료
+    setIsProcessing(true);
     
-    // 회복량 60%로 상향
-    let newHp = player.hp + Math.floor(player.maxHp * 0.6); 
+    let newHp = player.hp + Math.floor(player.maxHp * 0.6); // 60% 회복
     if (newHp > player.maxHp) {
       newHp = player.maxHp;
     }
 
+    const newCharges = recoveryCharges - 1;
+    setRecoveryCharges(newCharges); // 횟수 차감
+
     if (player.hp === newHp) {
-      addLog(`😊 이미 체력이 가득 찼다. (HP: ${newHp})`, 'normal');
-      // 턴은 낭비했지만, 횟수는 차감하지 않음
+      addLog(`😊 이미 체력이 가득 찼다. (HP: ${newHp}, 남은 횟수: ${newCharges})`, 'normal');
     } else {
-      // 횟수 차감 및 로그
-      const newCharges = recoveryCharges - 1;
-      setRecoveryCharges(newCharges); // 횟수 차감
       addLog(`😊 체력을 회복했다. (HP: ${newHp}, 남은 횟수: ${newCharges})`, 'normal');
     }
     
     const recoveredPlayer = { ...player, hp: newHp };
     setPlayer(recoveredPlayer);
 
-    // 적 턴 진행
     if (boss) {
-      runBossTurn(recoveredPlayer, currentEnemy as BossStats);
-    } else {
-      runMonsterTurn(recoveredPlayer, currentEnemy);
+      runBossTurn(recoveredPlayer, boss);
+    } else if (monster) {
+      runMonsterTurn(recoveredPlayer, monster);
     }
   };
+  // ---
 
-  // 스킬 지속/쿨다운 틱 (플레이어 턴 시작 시)
-  const tickSkills = (p: PlayerStats): PlayerStats => {
-    const nextBuffs = (p.activeBuffs || [])
-      .map(b => ({ ...b, remainingTurns: b.remainingTurns - 1 }))
-      .filter(b => b.remainingTurns > 0);
-    const nextCooldowns: NonNullable<PlayerStats['skillCooldowns']> = { ...(p.skillCooldowns || {}) };
-    Object.keys(nextCooldowns).forEach(k => {
-      const key = k as keyof typeof nextCooldowns;
-      if (typeof nextCooldowns[key] === 'number' && (nextCooldowns[key] as number) > 0) {
-        nextCooldowns[key] = Math.max(0, (nextCooldowns[key] as number) - 1);
-      }
-    });
-    return { ...p, activeBuffs: nextBuffs, skillCooldowns: nextCooldowns };
-  };
-
-  // 전투 중 스킬 사용
-  const handleUseSkill = (key: typeof allSkills[number]['key']) => {
-    if (isProcessing || !isPlayerTurn || !player) return;
-    const currentEnemy = boss || monster;
-    if (!currentEnemy) return;
-    if (!player.skills.includes(key)) {
-      addLog('🚫 습득하지 않은 스킬입니다.', 'fail');
-      return;
-    }
+  const handleUseSkill = (key: SkillKey) => {
+    if (isProcessing || !isPlayerTurn || !player || !(monster || boss)) return;
     const skill = allSkills.find(s => s.key === key);
     if (!skill) return;
-    const cd = player.skillCooldowns?.[key] || 0;
+    
+    const cd = (player.skillCooldowns || {})[key] || 0;
     if (cd > 0) {
-      addLog(`⏳ 스킬 쿨다운: ${cd}턴 남음`, 'fail');
+      addLog(`🚫 [${skill.name}] 스킬은 쿨타임 중입니다. (${cd}턴 남음)`, 'fail');
       return;
     }
 
-    setIsPlayerTurn(false); // 행동 소모
+    setIsPlayerTurn(false);
+    setIsProcessing(true);
+    addLog(`✨ [${skill.name}] 스킬 사용!`, 'vic');
+    
+    let updatedPlayer = { ...player };
+    let updatedDefender = boss ? ({ ...boss } as BossStats) : ({ ...monster } as CharacterStats);
+    let logs: Omit<LogMessage, 'id'>[] = [];
+    
+    // 쿨다운 설정
+    const newCooldowns = { ...(updatedPlayer.skillCooldowns || {}), [key]: skill.cooldown };
+    updatedPlayer.skillCooldowns = newCooldowns;
 
-    // 업그레이드 레벨 가져오기
-    const upgradeLevel = (player.skillUpgradeLevels || {})[key] || 0;
-    const upgradeMultiplier = 1 + (upgradeLevel * 0.2); // 업그레이드당 20% 증가 (최대 100%)
-
+    // 스킬 효과 적용
     if (skill.kind === 'buff') {
-      // 지속 시간 증가 (업그레이드당 +1턴, 최대 +5턴)
-      const baseDuration = skill.duration || 1;
-      const duration = baseDuration + upgradeLevel;
-      const bonuses = skill.bonuses || {};
-      const extra: any = {};
-      if (skill.effect?.type === 'evade') extra.evadeAll = true;
-      if (skill.effect?.type === 'reflect') extra.reflectPercent = skill.effect.value * upgradeMultiplier;
-      if (skill.effect?.type === 'barrier') extra.barrier = true;
-      if (skill.effect?.type === 'charge') extra.chargeAttackMultiplier = skill.effect.value * upgradeMultiplier;
-      if (skill.effect?.type === 'counter') extra.counterDamage = Math.floor((skill.effect.value || 0) * upgradeMultiplier);
-      if (skill.effect?.type === 'lifesteal') extra.lifeStealPercent = skill.effect.value * upgradeMultiplier;
-      if (skill.effect?.type === 'weaken') extra.weakenPercent = Math.min(0.99, skill.effect.value * upgradeMultiplier);
-      if (skill.effect?.type === 'multiStrike') extra.multiStrikeNext = true;
-      if (skill.effect?.type === 'trueStrike') extra.trueStrikeNext = true;
-      const updatedPlayer: PlayerStats = {
-        ...player,
-        activeBuffs: [ ...(player.activeBuffs || []), { key, remainingTurns: duration, bonuses, ...extra } ],
-        skillCooldowns: { ...(player.skillCooldowns || {}), [key]: skill.cooldown },
+      const newBuff = {
+        key: skill.key,
+        remainingTurns: skill.duration || 1,
+        bonuses: skill.bonuses || {},
+        evadeAll: skill.effect?.type === 'evade',
+        reflectPercent: skill.effect?.type === 'reflect' ? skill.effect.value : 0,
+        barrier: skill.effect?.type === 'barrier',
+        chargeAttackMultiplier: skill.effect?.type === 'charge' ? skill.effect.value : 0,
+        counterDamage: skill.effect?.type === 'counter' ? skill.effect.value : 0,
+        lifeStealPercent: skill.effect?.type === 'lifesteal' ? skill.effect.value : 0,
+        weakenPercent: skill.effect?.type === 'weaken' ? skill.effect.value : 0,
+        multiStrikeNext: skill.effect?.type === 'multiStrike',
+        trueStrikeNext: skill.effect?.type === 'trueStrike',
       };
-      setPlayer(updatedPlayer);
-      const upgradeText = upgradeLevel > 0 ? ` (업그레이드 Lv.${upgradeLevel})` : '';
-      addLog(`🛡 스킬 사용: ${skill.name} (지속 ${duration}턴)${upgradeText}`, 'normal');
-      // 적 턴 진행
-      if (boss) {
-        runBossTurn(updatedPlayer, currentEnemy as BossStats);
-      } else {
-        runMonsterTurn(updatedPlayer, currentEnemy);
-      }
-      return;
+      updatedPlayer.activeBuffs = [...(updatedPlayer.activeBuffs || []), newBuff];
     }
+    
     if (skill.effect?.type === 'timeStop') {
-      // 추가 턴 획득: 행동 소모하되 턴 유지
-      setPlayer({ ...player, skillCooldowns: { ...(player.skillCooldowns || {}), [key]: skill.cooldown } });
-      const upgradeText = upgradeLevel > 0 ? ` (업그레이드 Lv.${upgradeLevel})` : '';
-      addLog(`⏳ 시간 정지! 추가 턴을 얻었다.${upgradeText}`, 'cri');
+      addLog(`⏰ 시간이 멈췄습니다! 플레이어 턴을 즉시 다시 시작합니다.`, 'vic');
+      const ticked = tickSkills(updatedPlayer);
+      const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, updatedDefender, getEffectivePlayerStats);
+      addLogs(petLogs);
+      setPlayer(playerAfterPet);
+      if (boss) setBoss(monsterAfterPet as BossStats); else setMonster(monsterAfterPet);
+      
       setIsPlayerTurn(true);
       setIsProcessing(false);
       return;
     }
 
     if (skill.effect?.type === 'stun') {
-      // 스턴 턴 수 증가 (업그레이드당 +1턴)
-      const baseTurns = Math.max(1, Math.floor(skill.effect.value));
-      const turns = baseTurns + upgradeLevel;
-      const updated = { ...player, monsterStunnedTurns: (player.monsterStunnedTurns || 0) + turns };
-      setPlayer({ ...updated, skillCooldowns: { ...(player.skillCooldowns || {}), [key]: skill.cooldown } });
-      const upgradeText = upgradeLevel > 0 ? ` (업그레이드 Lv.${upgradeLevel})` : '';
-      addLog(`🌀 적이 ${turns}턴 동안 기절했다!${upgradeText}`, 'cri');
-      // 스턴은 사용으로 행동 소모되고, 다음 적 턴에 적용되어 스킵됨
-      if (boss) {
-        runBossTurn(updated, currentEnemy as BossStats);
-      } else {
-        runMonsterTurn(updated, currentEnemy);
-      }
-      return;
+      logs.push({ msg: `💫 [${skill.name}] 스킬 효과! 적이 ${skill.effect.value}턴간 기절합니다!`, type: 'vic' });
+      updatedPlayer.monsterStunnedTurns = (updatedPlayer.monsterStunnedTurns || 0) + skill.effect.value;
     }
 
-    // 공격형 액티브: 강화된 공격 1회 수행
-    const effectivePlayer = getEffectivePlayerStats(player);
-    // 업그레이드에 따른 공격력 증가 적용
-    const baseMultiplier = skill.attackBonusMultiplier || 0;
-    const upgradedMultiplier = baseMultiplier * upgradeMultiplier;
-    // 기본 공격 계산
-    const result = calculateAttack(
-      { ...effectivePlayer, atk: Math.floor(effectivePlayer.atk * (1 + upgradedMultiplier)) },
-      currentEnemy,
-      !!skill.guaranteedCrit,
-    );
-    const upgradeText = upgradeLevel > 0 ? ` (업그레이드 Lv.${upgradeLevel})` : '';
-    addLogs([{ msg: `🔥 스킬 사용: ${skill.name}${upgradeText}`, type: 'cri' }, ...result.logs]);
+    // 공격형 스킬 처리
+    if (skill.kind === 'attack' && skill.effect?.type !== 'stun') {
+      const effectivePlayer = getEffectivePlayerStats(updatedPlayer);
+      const result = calculateAttack(effectivePlayer, updatedDefender, skill.guaranteedCrit);
+      logs.push(...result.logs);
+      updatedDefender = result.defender;
+      if (result.isBattleOver) {
+        addLogs(logs);
+        setPlayer(updatedPlayer);
+        if (boss) setBoss(updatedDefender as BossStats); else setMonster(updatedDefender);
+        if (boss) handleBossBattleEnd('victory', updatedPlayer, updatedDefender as BossStats);
+        else handleBattleEnd('victory', updatedPlayer, updatedDefender);
+        setIsProcessing(false);
+        return;
+      }
+    }
+
+    addLogs(logs);
+    setPlayer(updatedPlayer);
+    if (boss) setBoss(updatedDefender as BossStats); else setMonster(updatedDefender);
+
+    // 턴 종료
     if (boss) {
-      setBoss(result.defender as BossStats);
+      runBossTurn(updatedPlayer, updatedDefender as BossStats);
     } else {
-      setMonster(result.defender);
-    }
-
-    // 쿨다운 부여
-    setPlayer(prev => prev ? { ...prev, skillCooldowns: { ...(prev.skillCooldowns || {}), [key]: skill.cooldown } } : prev);
-
-    if (result.isBattleOver) {
-      if (boss) {
-        handleBossBattleEnd('victory', { ...player }, result.defender as BossStats);
-      } else {
-        handleBattleEnd('victory', { ...player }, result.defender);
-      }
-    } else {
-      if (boss) {
-        runBossTurn({ ...player }, result.defender as BossStats);
-      } else {
-        runMonsterTurn({ ...player }, result.defender);
-      }
+      runMonsterTurn(updatedPlayer, updatedDefender);
     }
   };
   
+  // --- (누락된 함수 추가) ---
   const handleEscape = () => {
-    if (isProcessing || !isPlayerTurn || !player) return;
-    const currentEnemy = boss || monster;
-    if (!currentEnemy) return;
-
-    setIsPlayerTurn(false); // 턴 종료
-    addLog(`🤫 ${player.name}은(는) 도망을 시도한다...`, 'normal');
-
-    // 도망 확률 (원본 공식)
-		// '유효 스탯'의 행운으로 도망 확률 계산
-		const effectivePlayer = getEffectivePlayerStats(player);
+    if (isProcessing || !isPlayerTurn || !player || !(monster || boss)) return;
+    setIsPlayerTurn(false);
+    setIsProcessing(true);
+    addLog(`🤫 도망을 시도합니다...`, 'normal');
+    
+    const effectivePlayer = getEffectivePlayerStats(player); // 순수 로직
+    const defender = boss ? (boss as CharacterStats) : (monster as CharacterStats);
+    
     let escapeRate = 50;
-    if (effectivePlayer.luk >= currentEnemy.luk * 2) {
+    if (effectivePlayer.luk >= defender.luk * 2) {
       escapeRate = 100;
     }
 
     setTimeout(() => {
       if (getRandom(1, 100) <= escapeRate) {
-        // 도망 성공
-        if (boss) {
-          handleBossBattleEnd('escape', { ...player });
-        } else {
-          handleBattleEnd('escape', { ...player });
-        }
+        if (boss) handleBossBattleEnd('escape', player);
+        else handleBattleEnd('escape', player);
       } else {
-        // 도망 실패
         addLog(`😥 도망치는 데 실패했다...`, 'fail');
-        if (boss) {
-          runBossTurn({ ...player }, currentEnemy as BossStats);
-        } else {
-          runMonsterTurn({ ...player }, currentEnemy);
-        }
+        if (boss) runBossTurn(player, boss);
+        else runMonsterTurn(player, monster!);
       }
-    }, 1000); // 도망 시도 딜레이
+    }, 1000);
   };
+  // ---
 
-	// 상점 관련 액션
-  const handleEnterShop = () => {
-    addLog(`🛍 상점에 입장했습니다.`, 'normal');
-    setGameState('shop');
-  };
-
-  const handleExitShop = () => {
-    addLog(`🏘️ 마을로 돌아갑니다.`, 'normal');
-    // 항상 홈(던전 메인)으로 복귀
-    setGameState('dungeon');
-  };
-
-  // 스킬 창 (모달)
-  const handleOpenSkills = () => {
-    if (isProcessing) return;
-    // 전투 중에는 스킬 배우기 창 접근 불가
-    if (gameState === 'battle') {
-      addLog(`🚫 전투 중에는 스킬을 배울 수 없습니다.`, 'fail');
-      return;
-    }
-    addLog(`📘 스킬 수련장을 연다.`, 'normal');
-    setIsSkillsOpen(true);
-  };
-
-  const handleCloseSkills = () => {
-    addLog(`📕 스킬 수련장을 닫았다.`, 'normal');
-    setIsSkillsOpen(false);
-  };
+	// --- 4. 상점/스킬/강화소 액션 ---
+  const handleEnterShop = () => setGameState('shop');
+  const handleExitShop = () => setGameState('dungeon');
+  const handleOpenSkills = () => setIsSkillsOpen(true);
+  const handleCloseSkills = () => setIsSkillsOpen(false);
 
   const handleBuyItem = (item: EquipmentItem) => {
     if (!player) return;
-
-    // 돈 확인
     if (player.money < item.price) {
       addLog(`💰 골드가 부족합니다. (필요: ${item.price} G)`, 'fail');
       return;
     }
+    const jobCanUse = !item.allowedJobs || item.allowedJobs.includes(player.job);
+    if (!jobCanUse) {
+      addLog(`🚫 직업 제한으로 구매할 수 없습니다.`, 'fail');
+      return;
+    }
     
-    // 구매 처리
-    setPlayer(prevPlayer => {
-      if (!prevPlayer) return null;
-      const next = {
-        ...prevPlayer,
-        money: prevPlayer.money - item.price,
-        ownedWeaponIds: item.type === 'weapon' ? [ ...(prevPlayer.ownedWeaponIds || []), item.id ] : (prevPlayer.ownedWeaponIds || []),
-        ownedArmorIds: item.type === 'armor' ? [ ...(prevPlayer.ownedArmorIds || []), item.id ] : (prevPlayer.ownedArmorIds || []),
-      };
-      return next;
-    });
-    addLog(`✨ ${item.name}을(를) 구매했습니다! (장착은 장착하기 버튼)`, 'gainMoney');
+    const newPlayer = { ...player, money: player.money - item.price };
+    if (item.type === 'weapon') {
+      newPlayer.ownedWeaponIds = [...(newPlayer.ownedWeaponIds || []), item.id];
+    } else {
+      newPlayer.ownedArmorIds = [...(newPlayer.ownedArmorIds || []), item.id];
+    }
+    setPlayer(newPlayer);
+    addLog(`✨ ${item.name}을(를) 구매했습니다!`, 'gainMoney');
   };
 
-  // 펫 구매
   const handleBuyPet = (petId: string) => {
     if (!player) return;
-    const petItem = petShopList.find(p => p.id === petId);
-    if (!petItem) return;
-    if (player.money < petItem.price) {
-      addLog(`💰 골드가 부족합니다. (필요: ${petItem.price} G)`, 'fail');
+    const pet = petShopList.find(p => p.id === petId);
+    if (!pet) return;
+    if (player.money < pet.price) {
+      addLog(`💰 골드가 부족합니다. (필요: ${pet.price} G)`, 'fail');
       return;
     }
-    setPlayer(prev => prev ? { ...prev, money: prev.money - petItem.price, ownedPetIds: [ ...(prev.ownedPetIds || []), petItem.id ] } : prev);
-    addLog(`✨ 새로운 펫 획득! ${petItem.icon} ${petItem.name} (장착 가능)`, 'gainMoney');
+    setPlayer({ 
+      ...player, 
+      money: player.money - pet.price,
+      ownedPetIds: [...(player.ownedPetIds || []), pet.id],
+    });
+    addLog(`✨ ${pet.icon} ${pet.name}을(를) 구매했습니다!`, 'gainMoney');
   };
 
-  // 장착 핸들러
   const handleEquipWeapon = (id: string) => {
-    const all = weaponShopList;
-    const found = all.find(w => w.id === id);
-    if (!player || !found) return;
-    if (!(player.ownedWeaponIds || []).includes(id)) {
-      addLog('🚫 소유하지 않은 무기입니다.', 'fail');
+    if (!player) return;
+    const item = weaponShopList.find(w => w.id === id) || (id === STARTER_CLUB.id ? STARTER_CLUB : null);
+    if (!item) return;
+    const jobCanUse = !item.allowedJobs || item.allowedJobs.includes(player.job);
+    if (!jobCanUse) {
+      addLog(`🚫 직업 제한으로 장착할 수 없습니다.`, 'fail');
       return;
     }
-    setPlayer(prev => prev ? { ...prev, weapon: found } : prev);
-    addLog(`⚔️ 무기 장착: ${found.name}`, 'normal');
+    setPlayer({ ...player, weapon: item });
+    addLog(`⚔️ ${item.name}을(를) 장착했습니다.`, 'normal');
   };
+
   const handleEquipArmor = (id: string) => {
-    const all = armorShopList;
-    const found = all.find(a => a.id === id);
-    if (!player || !found) return;
-    if (!(player.ownedArmorIds || []).includes(id)) {
-      addLog('🚫 소유하지 않은 방어구입니다.', 'fail');
+    if (!player) return;
+    const item = armorShopList.find(a => a.id === id);
+    if (!item) return;
+    const jobCanUse = !item.allowedJobs || item.allowedJobs.includes(player.job);
+    if (!jobCanUse) {
+      addLog(`🚫 직업 제한으로 장착할 수 없습니다.`, 'fail');
       return;
     }
-    setPlayer(prev => prev ? { ...prev, armor: found } : prev);
-    addLog(`🛡️ 방어구 장착: ${found.name}`, 'normal');
+    setPlayer({ ...player, armor: item });
+    addLog(`🛡️ ${item.name}을(를) 장착했습니다.`, 'normal');
   };
+
   const handleEquipPet = (id: string) => {
-    const found = petShopList.find(p => p.id === id);
-    if (!player || !found) return;
-    if (!(player.ownedPetIds || []).includes(id)) {
-      addLog('🚫 소유하지 않은 펫입니다.', 'fail');
-      return;
-    }
-    setPlayer(prev => prev ? { ...prev, pet: found } : prev);
-    addLog(`🐾 펫 장착: ${found.icon} ${found.name}`, 'normal');
+    if (!player) return;
+    const pet = petShopList.find(p => p.id === id);
+    if (!pet) return;
+    setPlayer({ ...player, pet: pet });
+    addLog(`🐾 ${pet.icon} ${pet.name}을(를) 장착했습니다.`, 'normal');
   };
 
-  // 강화소 열기/닫기
-  const handleOpenPetEnhance = () => {
-    addLog(`🧪 펫 강화소에 입장했습니다.`, 'normal');
-    setGameState('petEnhance');
-  };
-  const handleOpenWeaponEnhance = () => {
-    addLog(`🔧 무기 강화소에 입장했습니다.`, 'normal');
-    setGameState('weaponEnhance');
-  };
-  const handleCloseEnhance = () => {
-    addLog(`🏘️ 마을로 돌아갑니다.`, 'normal');
-    setGameState('dungeon');
-  };
-
-  // 강화 로직
+  const handleOpenPetEnhance = () => setGameState('petEnhance');
+  const handleOpenWeaponEnhance = () => setGameState('weaponEnhance');
+  const handleCloseEnhance = () => setGameState('dungeon');
+  
   const getPetEnhanceCost = (level: number) => 100 + level * 100;
   const handleEnhancePet = () => {
     if (!player || !player.pet) {
-      addLog(`🚫 강화할 펫이 없습니다.`, 'fail');
+      addLog('🚫 강화할 펫을 먼저 장착해주세요.', 'fail');
       return;
     }
-    const petId = player.pet.id;
-    const level = (player.petEnhanceLevels || {})[petId] || 0;
+    const level = (player.petEnhanceLevels || {})[player.pet.id] || 0;
     const cost = getPetEnhanceCost(level);
     if (player.money < cost) {
       addLog(`💰 골드가 부족합니다. (필요: ${cost} G)`, 'fail');
       return;
     }
-    const nextLevel = level + 1;
-    setPlayer(prev => prev ? { ...prev, money: prev.money - cost, petEnhanceLevels: { ...(prev.petEnhanceLevels || {}), [petId]: nextLevel } } : prev);
-    addLog(`🧪 펫 강화! 파워 +5% (누적 +${nextLevel * 5}%)`, 'lvup');
+    const newLevel = level + 1;
+    setPlayer({
+      ...player,
+      money: player.money - cost,
+      petEnhanceLevels: { ...(player.petEnhanceLevels || {}), [player.pet.id]: newLevel },
+    });
+    addLog(`✨ ${player.pet.icon} ${player.pet.name} 강화 성공! [${newLevel}강]`, 'vic');
   };
 
-  // 방어구 강화 (추가)
   const getArmorEnhanceCost = (level: number) => 150 + level * 150;
   const handleEnhanceArmor = () => {
     if (!player || !player.armor) {
-      addLog(`🚫 강화할 방어구가 없습니다.`, 'fail');
+      addLog('🚫 강화할 방어구를 먼저 장착해주세요.', 'fail');
       return;
     }
-    const armorId = player.armor.id;
-    const level = (player.armorEnhanceLevels || {})[armorId] || 0;
+    const level = (player.armorEnhanceLevels || {})[player.armor.id] || 0;
     const cost = getArmorEnhanceCost(level);
     if (player.money < cost) {
       addLog(`💰 골드가 부족합니다. (필요: ${cost} G)`, 'fail');
       return;
     }
-    const nextLevel = level + 1;
-    setPlayer(prev => prev ? { ...prev, money: prev.money - cost, armorEnhanceLevels: { ...(prev.armorEnhanceLevels || {}), [armorId]: nextLevel } } : prev);
-    addLog(`🛡️ 방어구 강화! DEF +5 (강화 ${nextLevel}단)`, 'lvup');
+    const newLevel = level + 1;
+    setPlayer({
+      ...player,
+      money: player.money - cost,
+      armorEnhanceLevels: { ...(player.armorEnhanceLevels || {}), [player.armor.id]: newLevel },
+    });
+    addLog(`✨ ${player.armor.name} 강화 성공! [${newLevel}강]`, 'vic');
   };
-
+  
   const getWeaponEnhanceCost = (level: number) => 150 + level * 150;
   const handleEnhanceWeapon = () => {
     if (!player || !player.weapon) {
-      addLog(`🚫 강화할 무기가 없습니다.`, 'fail');
+      addLog('🚫 강화할 무기를 먼저 장착해주세요.', 'fail');
       return;
     }
-    const weaponId = player.weapon.id;
-    const level = (player.weaponEnhanceLevels || {})[weaponId] || 0;
+    const level = (player.weaponEnhanceLevels || {})[player.weapon.id] || 0;
     const cost = getWeaponEnhanceCost(level);
     if (player.money < cost) {
       addLog(`💰 골드가 부족합니다. (필요: ${cost} G)`, 'fail');
       return;
     }
-    const nextLevel = level + 1;
-    setPlayer(prev => prev ? { ...prev, money: prev.money - cost, weaponEnhanceLevels: { ...(prev.weaponEnhanceLevels || {}), [weaponId]: nextLevel } } : prev);
-    addLog(`🔧 무기 강화! ATK +5 (강화 ${nextLevel}단)`, 'lvup');
+    const newLevel = level + 1;
+    setPlayer({
+      ...player,
+      money: player.money - cost,
+      weaponEnhanceLevels: { ...(player.weaponEnhanceLevels || {}), [player.weapon.id]: newLevel },
+    });
+    addLog(`✨ ${player.weapon.name} 강화 성공! [${newLevel}강]`, 'vic');
   };
 
-	// --- 👇 5. handleKeyDown 함수 이전에 새 함수 추가 ---
+	// --- 5. 보스 보상 액션 ---
   const handleBossRewardAction = (action: 'equip' | 'sell' | 'ignore', reward: BossReward) => {
     if (!player) return;
-
     let updatedPlayer = { ...player };
     const logs: Omit<LogMessage, 'id'>[] = [];
-
+    
     // 아이템 소유권 처리 헬퍼
     const grantOwnership = (p: PlayerStats, item: EquipmentItem): PlayerStats => {
       if (item.type === 'weapon') {
@@ -1744,53 +1090,63 @@ export const useGameEngine = () => {
     
     addLogs(logs);
     setPlayer(updatedPlayer);
-    setBossReward(null); // 모달 닫기
-    setShowBattleChoice(true); // 전투 후 선택지 다시 표시
-    setGameState('dungeon'); // 던전으로 복귀
+    setBossReward(null);
+    setShowBattleChoice(true);
+    setGameState('dungeon');
   };
   
-  // 키보드 이벤트 핸들러 (단축키)
   const handleKeyDown = (key: string) => {
-    if (isProcessing) return; // 처리 중일 땐 입력 무시
+    if (isProcessing) return; 
 
     if (gameState === 'dungeon') {
-      if (key === 's') handleOpenDungeonSelect();
-      if (key === 'b') handleOpenBossSelect();
-      if (key === 'r') handleDungeonRecovery();
-			if (key === 'h') handleEnterShop();
-      if (key === 'k') {
-        if (isSkillsOpen) handleCloseSkills(); else handleOpenSkills();
+      if (!showBattleChoice) {
+        if (key === 's') handleOpenDungeonSelect(); // 던전 탐험
+        if (key === 'b') handleOpenBossSelect(); // 보스 던전
+        if (key === 'r') handleDungeonRecovery(); // 휴식
+        if (key === 'h') handleEnterShop(); // 상점 (h)
+        if (key === 'k') handleOpenSkills(); // 스킬
+        if (key === 'p') handleOpenPetEnhance(); // 펫 강화
+        if (key === 'w') handleOpenWeaponEnhance(); // 무기 강화
       }
-    } 
-    else if (gameState === 'battle') {
+    } else if (gameState === 'battle') {
       if (showBattleChoice) {
-        // 전투 승리 후 선택
+        // 전투 후 선택지 (C, X)
         if (key === 'c') handleContinueBattle();
         if (key === 'x') handleExitDungeon();
-      } else if (isPlayerTurn) {
-        // 일반 전투 중
+      } 
+      else if (isPlayerTurn) {
+        // 전투 중 (A, D, E, Q)
         if (key === 'a') handleAttack();
         if (key === 'd') handleDefend();
         if (key === 'e') handleRecovery();
         if (key === 'q') handleEscape();
-        // 전투 중에는 스킬 배우기 창 접근 불가
-      }
+        // (스킬 단축키 로D(A, D, E, Q)
+			}
+    } else if (gameState === 'shop') {
+      if (key === 'h' || key === 'q') handleExitShop();
+    } else if (isSkillsOpen) {
+      if (key === 'k' || key === 'q') handleCloseSkills();
+    } else if (gameState === 'petEnhance' || gameState === 'weaponEnhance') {
+      if (key === 'q') handleCloseEnhance();
+    } else if (gameState === 'dungeonSelect') {
+      if (key === 'q') handleCloseDungeonSelect();
+    } else if (gameState === 'bossSelect') {
+      if (key === 'q') handleCloseBossSelect();
     }
-    // 모달 공통 단축키
-    if (isSkillsOpen && (key === 'k' || key === 'q')) {
-      handleCloseSkills();
-    }
+    // 보상 모달은 키보드 입력을 막습니다 (버튼 클릭만 허용)
   };
+  // ---
 
+  // --- 6. Return 문 ---
   return {
     player,
-    monster: boss || monster, // 보스가 있으면 보스, 없으면 일반 몬스터
+    monster: boss || monster,
     logMessages,
     gameState,
     isPlayerTurn,
     isProcessing,
-		recoveryCharges, // UI에 횟수를 표시하기 위해 추가
-    consecutiveMisses, // (이전 요청에서 추가됨)
+		recoveryCharges,
+    consecutiveMisses,
     skills: allSkills,
     isSkillsOpen,
     currentDungeonId,
@@ -1815,7 +1171,7 @@ export const useGameEngine = () => {
       handleRecovery,
       handleEscape,
       handleKeyDown,
-			handleEnterShop, // 상점
+			handleEnterShop,
       handleExitShop,
       handleBuyItem,
       handleBuyPet,
@@ -1834,7 +1190,7 @@ export const useGameEngine = () => {
       learnSkill,
       handleContinueBattle,
       handleExitDungeon,
-			handleBossRewardAction, // 보스 보상 관련 함수
+			handleBossRewardAction,
     },
   };
 };

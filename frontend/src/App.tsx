@@ -118,7 +118,7 @@ function App() {
           onDefend={actions.handleDefend}
           onRecover={actions.handleRecovery}
           onEscape={actions.handleEscape}
-				onEnterShop={actions.handleEnterShop}
+				  onEnterShop={actions.handleEnterShop}
           onOpenPetEnhance={actions.handleOpenPetEnhance}
           onOpenWeaponEnhance={actions.handleOpenWeaponEnhance}
           onOpenSkills={actions.handleOpenSkills}

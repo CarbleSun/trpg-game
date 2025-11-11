@@ -54,7 +54,6 @@ const ActionMenu = ({
   isPlayerTurn,
   isProcessing,
 	recoveryCharges, // <-- 2. prop 받기
-  onDungeonNext,
   onDungeonRecover,
   onAttack,
   onDefend,
