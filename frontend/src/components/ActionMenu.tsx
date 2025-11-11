@@ -9,6 +9,7 @@ interface ActionMenuProps {
   skillCooldowns?: Partial<Record<SkillKey, number>>;
   skills?: Skill[];
   showBattleChoice?: boolean;
+  isScarecrowBattle?: boolean;
   onDungeonNext: () => void;
   onDungeonRecover: () => void;
   onAttack: () => void;
@@ -18,12 +19,14 @@ interface ActionMenuProps {
   onEnterShop: () => void;
   onOpenPetEnhance: () => void;
   onOpenWeaponEnhance: () => void;
+  onOpenScarecrow: () => void;
   onOpenSkills: () => void;
   onUseSkill: (key: SkillKey) => void;
   onOpenDungeonSelect: () => void;
   onOpenBossSelect: () => void;
   onContinueBattle: () => void;
   onExitDungeon: () => void;
+  onExitScarecrowBattle?: () => void;
 }
 
 const ActionButton = ({ onClick, disabled, children, hotkey }: {
@@ -63,6 +66,7 @@ const ActionMenu = ({
   onOpenSkills,
   onOpenPetEnhance,
   onOpenWeaponEnhance,
+  onOpenScarecrow,
   learnedSkills = [],
   skillCooldowns = {},
   skills = [],
@@ -72,6 +76,8 @@ const ActionMenu = ({
   showBattleChoice = false,
   onContinueBattle,
   onExitDungeon,
+  isScarecrowBattle = false,
+  onExitScarecrowBattle,
 }: ActionMenuProps) => {
   const isBattle = gameState === 'battle';
   const canAct = !isProcessing && (isBattle ? isPlayerTurn : true);
@@ -104,6 +110,9 @@ const ActionMenu = ({
           <ActionButton onClick={onOpenWeaponEnhance} disabled={isProcessing} hotkey="W">
             무기 강화소
           </ActionButton>
+          <ActionButton onClick={onOpenScarecrow} disabled={isProcessing} hotkey="T">
+            허수아비
+          </ActionButton>
         </div>
       )}
 
@@ -132,9 +141,15 @@ const ActionMenu = ({
               <ActionButton onClick={onRecover} disabled={!canAct} hotkey="E">
                 회복 ({recoveryCharges})
               </ActionButton>
-              <ActionButton onClick={onEscape} disabled={!canAct} hotkey="Q">
-                도망
-              </ActionButton>
+              {isScarecrowBattle && onExitScarecrowBattle ? (
+                <ActionButton onClick={onExitScarecrowBattle} disabled={isProcessing} hotkey="Q">
+                  나가기
+                </ActionButton>
+              ) : (
+                <ActionButton onClick={onEscape} disabled={!canAct} hotkey="Q">
+                  도망
+                </ActionButton>
+              )}
               {/* 배운 스킬 버튼들 */}
               {learnedSkills.map((key) => {
                 const cd = (skillCooldowns as Record<SkillKey, number | undefined>)[key] || 0;

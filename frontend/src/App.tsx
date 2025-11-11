@@ -13,6 +13,7 @@ import DungeonSelectionScreen from './components/DungeonSelectionScreen';
 import BossSelectionScreen from './components/BossSelectionScreen';
 import BossRewardModal from './components/BossRewardModal';
 import DeveloperPanel from './components/DeveloperPanel';
+import ScarecrowScreen from './components/ScarecrowScreen';
 import { useGameEngine } from './hooks/useGameEngine';
 
 function App() {
@@ -33,6 +34,7 @@ function App() {
     bossCooldowns,
 		bossReward,
     isDeveloperMode,
+    isScarecrowBattle,
     actions,
   } = useGameEngine();
 
@@ -180,6 +182,7 @@ function App() {
 				  onEnterShop={actions.handleEnterShop}
           onOpenPetEnhance={actions.handleOpenPetEnhance}
           onOpenWeaponEnhance={actions.handleOpenWeaponEnhance}
+          onOpenScarecrow={actions.handleOpenScarecrow}
           onOpenSkills={actions.handleOpenSkills}
           onUseSkill={actions.handleUseSkill}
           onOpenDungeonSelect={actions.handleOpenDungeonSelect}
@@ -187,6 +190,8 @@ function App() {
           showBattleChoice={showBattleChoice}
           onContinueBattle={actions.handleContinueBattle}
           onExitDungeon={actions.handleExitDungeon}
+          isScarecrowBattle={isScarecrowBattle}
+          onExitScarecrowBattle={actions.handleExitScarecrowBattle}
         />
         
         {/* 씬 (VS) */}
@@ -251,6 +256,15 @@ function App() {
           player={player}
           reward={bossReward}
           onAction={actions.handleBossRewardAction}
+        />
+      )}
+
+      {/* 허수아비 화면 */}
+      {gameState === 'scarecrow' && (
+        <ScarecrowScreen
+          player={player}
+          onClose={actions.handleCloseScarecrow}
+          onStartBattle={actions.handleStartScarecrowBattle}
         />
       )}
 

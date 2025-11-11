@@ -54,6 +54,13 @@ export const useGameEngine = () => {
   });
   const [bossReward, setBossReward] = useState<BossReward | null>(null);
   const [isDeveloperMode, setIsDeveloperMode] = useState(false);
+  const [isScarecrowBattle, setIsScarecrowBattle] = useState(false); // 허수아비 전투 플래그
+  const [scarecrowConfig, setScarecrowConfig] = useState<{
+    maxHp: number;
+    atk: number;
+    def: number;
+    luk: number;
+  } | null>(null); // 허수아비 설정 저장
 
   // Electron API 타입 정의
   type ElectronAPI = {
@@ -406,6 +413,19 @@ export const useGameEngine = () => {
         setPlayer(playerAfterPet);
         setMonster(monsterAfterPet);
         
+        // 허수아비 전투인 경우 체력 무한 (자동 회복)
+        if (isScarecrowBattle && monsterAfterPet && monsterAfterPet.hp <= 0) {
+          addLog(`🎯 허수아비를 쓰러뜨렸지만, 허수아비는 즉시 회복됩니다!`, 'vic');
+          const restoredScarecrow: CharacterStats = {
+            ...monsterAfterPet,
+            hp: scarecrowConfig?.maxHp || monsterAfterPet.maxHp,
+          };
+          setMonster(restoredScarecrow);
+          setIsPlayerTurn(true);
+          setIsProcessing(false);
+          return;
+        }
+        
         if (monsterAfterPet && monsterAfterPet.hp <= 0) {
           handleBattleEnd('victory', playerAfterPet, monsterAfterPet);
           setIsProcessing(false);
@@ -431,6 +451,20 @@ export const useGameEngine = () => {
         addLogs(petLogs);
         setPlayer(playerAfterPet);
         setMonster(monsterAfterPet);
+        
+        // 허수아비 전투인 경우 체력 무한 (자동 회복)
+        if (isScarecrowBattle && monsterAfterPet && monsterAfterPet.hp <= 0) {
+          addLog(`🎯 허수아비를 쓰러뜨렸지만, 허수아비는 즉시 회복됩니다!`, 'vic');
+          const restoredScarecrow: CharacterStats = {
+            ...monsterAfterPet,
+            hp: scarecrowConfig?.maxHp || monsterAfterPet.maxHp,
+          };
+          setMonster(restoredScarecrow);
+          setIsPlayerTurn(true);
+          setIsProcessing(false);
+          return;
+        }
+        
         if (monsterAfterPet && monsterAfterPet.hp <= 0) {
           handleBattleEnd('victory', playerAfterPet, monsterAfterPet);
           setIsProcessing(false);
@@ -451,6 +485,20 @@ export const useGameEngine = () => {
         addLogs(petLogs);
         setPlayer(playerAfterPet);
         setMonster(monsterAfterPet);
+        
+        // 허수아비 전투인 경우 체력 무한 (자동 회복)
+        if (isScarecrowBattle && monsterAfterPet && monsterAfterPet.hp <= 0) {
+          addLog(`🎯 허수아비를 쓰러뜨렸지만, 허수아비는 즉시 회복됩니다!`, 'vic');
+          const restoredScarecrow: CharacterStats = {
+            ...monsterAfterPet,
+            hp: scarecrowConfig?.maxHp || monsterAfterPet.maxHp,
+          };
+          setMonster(restoredScarecrow);
+          setIsPlayerTurn(true);
+          setIsProcessing(false);
+          return;
+        }
+        
         if (monsterAfterPet && monsterAfterPet.hp <= 0) {
           handleBattleEnd('victory', playerAfterPet, monsterAfterPet);
           setIsProcessing(false);
@@ -496,6 +544,19 @@ export const useGameEngine = () => {
         setPlayer(playerAfterPet);
         setMonster(monsterAfterPet);
 
+        // 허수아비 전투인 경우 체력 무한 (자동 회복)
+        if (isScarecrowBattle && monsterAfterPet && monsterAfterPet.hp <= 0) {
+          addLog(`🎯 허수아비를 쓰러뜨렸지만, 허수아비는 즉시 회복됩니다!`, 'vic');
+          const restoredScarecrow: CharacterStats = {
+            ...monsterAfterPet,
+            hp: scarecrowConfig?.maxHp || monsterAfterPet.maxHp,
+          };
+          setMonster(restoredScarecrow);
+          setIsPlayerTurn(true);
+          setIsProcessing(false);
+          return;
+        }
+        
         if (monsterAfterPet && monsterAfterPet.hp <= 0) {
           handleBattleEnd('victory', playerAfterPet, monsterAfterPet);
           setIsProcessing(false);
@@ -839,6 +900,42 @@ export const useGameEngine = () => {
     updatedPlayer: PlayerStats,
     targetMonster?: CharacterStats,
   ) => {
+    // 허수아비 전투인 경우 특별 처리
+    if (isScarecrowBattle && targetMonster) {
+      if (type === 'victory') {
+        addLog(`🎯 허수아비를 물리쳤습니다!`, 'vic');
+        // 허수아비 HP 회복
+        const restoredScarecrow: CharacterStats = {
+          ...targetMonster,
+          hp: scarecrowConfig?.maxHp || targetMonster.maxHp,
+        };
+        setMonster(restoredScarecrow);
+        // 플레이어 턴으로 전환
+        addLog(`--- 플레이어의 턴 ---`, 'normal');
+        const ticked = tickSkills(updatedPlayer);
+        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, restoredScarecrow, getEffectivePlayerStats);
+        addLogs(petLogs);
+        setPlayer(playerAfterPet);
+        setMonster(monsterAfterPet);
+        setIsPlayerTurn(true);
+        setIsProcessing(false);
+        return;
+      } else if (type === 'defeat') {
+        addLog(`😊 허수아비에게 패배했습니다. 체력이 회복됩니다.`, 'normal');
+        const recoveredPlayer = { ...updatedPlayer, hp: updatedPlayer.maxHp };
+        setPlayer(recoveredPlayer);
+        // 허수아비 HP 회복
+        const restoredScarecrow: CharacterStats = {
+          ...targetMonster,
+          hp: scarecrowConfig?.maxHp || targetMonster.maxHp,
+        };
+        setMonster(restoredScarecrow);
+        setIsPlayerTurn(true);
+        setIsProcessing(false);
+        return;
+      }
+    }
+    
     setConsecutiveMisses(0);
 		setRecoveryCharges(5); 
     let playerAfterBattle = { ...updatedPlayer };
@@ -1121,7 +1218,24 @@ export const useGameEngine = () => {
     setPlayer(playerAfterAttack); // (중요) 턴 넘기기 전에 버프 제거된 플레이어 상태 반영
 
     if (result.isBattleOver) {
-      if (boss) {
+      // 허수아비 전투인 경우 체력 무한 (자동 회복)
+      if (isScarecrowBattle && !boss) {
+        addLog(`🎯 허수아비를 쓰러뜨렸지만, 허수아비는 즉시 회복됩니다!`, 'vic');
+        const restoredScarecrow: CharacterStats = {
+          ...updatedDefender,
+          hp: scarecrowConfig?.maxHp || updatedDefender.maxHp,
+        };
+        setMonster(restoredScarecrow);
+        // 플레이어 턴으로 전환
+        addLog(`--- 플레이어의 턴 ---`, 'normal');
+        const ticked = tickSkills(playerAfterAttack);
+        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, restoredScarecrow, getEffectivePlayerStats);
+        addLogs(petLogs);
+        setPlayer(playerAfterPet);
+        setMonster(monsterAfterPet);
+        setIsPlayerTurn(true);
+        setIsProcessing(false);
+      } else if (boss) {
         handleBossBattleEnd('victory', playerAfterAttack, updatedDefender as BossStats);
       } else {
         handleBattleEnd('victory', playerAfterAttack, updatedDefender);
@@ -1256,9 +1370,30 @@ export const useGameEngine = () => {
       if (result.isBattleOver) {
         addLogs(logs);
         setPlayer(updatedPlayer);
-        if (boss) setBoss(updatedDefender as BossStats); else setMonster(updatedDefender);
-        if (boss) handleBossBattleEnd('victory', updatedPlayer, updatedDefender as BossStats);
-        else handleBattleEnd('victory', updatedPlayer, updatedDefender);
+        // 허수아비 전투인 경우 체력 무한 (자동 회복)
+        if (isScarecrowBattle && !boss) {
+          addLog(`🎯 허수아비를 쓰러뜨렸지만, 허수아비는 즉시 회복됩니다!`, 'vic');
+          const restoredScarecrow: CharacterStats = {
+            ...updatedDefender,
+            hp: scarecrowConfig?.maxHp || updatedDefender.maxHp,
+          };
+          setMonster(restoredScarecrow);
+          // 플레이어 턴으로 전환
+          addLog(`--- 플레이어의 턴 ---`, 'normal');
+          const ticked = tickSkills(updatedPlayer);
+          const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, restoredScarecrow, getEffectivePlayerStats);
+          addLogs(petLogs);
+          setPlayer(playerAfterPet);
+          setMonster(monsterAfterPet);
+          setIsPlayerTurn(true);
+          setIsProcessing(false);
+        } else if (boss) {
+          setBoss(updatedDefender as BossStats);
+          handleBossBattleEnd('victory', updatedPlayer, updatedDefender as BossStats);
+        } else {
+          setMonster(updatedDefender);
+          handleBattleEnd('victory', updatedPlayer, updatedDefender);
+        }
         setIsProcessing(false);
         return;
       }
@@ -1401,6 +1536,63 @@ export const useGameEngine = () => {
   const handleOpenPetEnhance = () => setGameState('petEnhance');
   const handleOpenWeaponEnhance = () => setGameState('weaponEnhance');
   const handleCloseEnhance = () => setGameState('dungeon');
+  const handleOpenScarecrow = () => {
+    setGameState('scarecrow');
+    setIsScarecrowBattle(false);
+  };
+  const handleCloseScarecrow = () => {
+    setGameState('dungeon');
+    setIsScarecrowBattle(false);
+    setScarecrowConfig(null);
+    setMonster(null);
+    setBoss(null);
+  };
+  
+  // 허수아비 전투 시작
+  const handleStartScarecrowBattle = (config: { atk: number; def: number; luk: number }) => {
+    if (!player) return;
+    // 허수아비는 체력이 무한이므로 maxHp를 큰 값으로 설정
+    const maxHp = 999999;
+    setScarecrowConfig({ maxHp, ...config });
+    setIsScarecrowBattle(true);
+    
+    const scarecrow: CharacterStats = {
+      name: '허수아비',
+      level: 1,
+      hp: maxHp,
+      maxHp: maxHp,
+      atk: config.atk,
+      def: config.def,
+      luk: config.luk,
+    };
+    
+    setMonster(scarecrow);
+    setBoss(null);
+    setGameState('battle');
+    setIsPlayerTurn(true);
+    setIsProcessing(false);
+    setConsecutiveMisses(0);
+    setRecoveryCharges(5);
+    addLog(`🎯 허수아비 훈련장에 입장했습니다.`, 'normal');
+    addLog(`--- 플레이어의 턴 ---`, 'normal');
+  };
+  
+  // 허수아비 전투 종료 (나가기)
+  const handleExitScarecrowBattle = () => {
+    if (!player) return;
+    // 플레이어 HP 회복
+    const recoveredPlayer = { ...player, hp: player.maxHp };
+    setPlayer(recoveredPlayer);
+    addLog(`😊 허수아비 훈련장에서 나왔습니다. 체력이 모두 회복되었습니다.`, 'normal');
+    
+    setIsScarecrowBattle(false);
+    setScarecrowConfig(null);
+    setMonster(null);
+    setBoss(null);
+    setGameState('dungeon'); // 던전 화면으로 돌아감
+    setIsPlayerTurn(true);
+    setIsProcessing(false);
+  };
   
   const getPetEnhanceCost = (level: number) => 100 + level * 100;
   const handleEnhancePet = () => {
@@ -1539,6 +1731,7 @@ export const useGameEngine = () => {
         if (key === 'k') handleOpenSkills(); // 스킬
         if (key === 'p') handleOpenPetEnhance(); // 펫 강화
         if (key === 'w') handleOpenWeaponEnhance(); // 무기 강화
+        if (key === 't') handleOpenScarecrow(); // 허수아비 (Training dummy)
       }
     } else if (gameState === 'battle') {
       if (showBattleChoice) {
@@ -1551,12 +1744,20 @@ export const useGameEngine = () => {
         if (key === 'a') handleAttack();
         if (key === 'd') handleDefend();
         if (key === 'e') handleRecovery();
-        if (key === 'q') handleEscape();
+        if (key === 'q') {
+          if (isScarecrowBattle) {
+            handleExitScarecrowBattle();
+          } else {
+            handleEscape();
+          }
+        }
 			}
     } else if (gameState === 'shop') {
       if (key === 'h' || key === 'q') handleExitShop();
     } else if (gameState === 'petEnhance' || gameState === 'weaponEnhance') {
       if (key === 'q') handleCloseEnhance();
+    } else if (gameState === 'scarecrow') {
+      if (key === 'q') handleCloseScarecrow();
     } else if (gameState === 'dungeonSelect') {
       if (key === 'q') handleCloseDungeonSelect();
     } else if (gameState === 'bossSelect') {
@@ -1584,6 +1785,7 @@ export const useGameEngine = () => {
     shopLists: { weapons: weaponShopList, armors: armorShopList, pets: petShopList },
 		bossReward,
     isDeveloperMode,
+    isScarecrowBattle,
     actions: {
       gameStart,
       handleSelectDungeon,
@@ -1615,6 +1817,10 @@ export const useGameEngine = () => {
       handleCloseEnhance,
       handleEnhancePet,
       handleEnhanceWeapon,
+      handleOpenScarecrow,
+      handleCloseScarecrow,
+      handleStartScarecrowBattle,
+      handleExitScarecrowBattle,
       handleOpenSkills,
       handleCloseSkills,
       handleUseSkill,
