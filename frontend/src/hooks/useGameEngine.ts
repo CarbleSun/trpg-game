@@ -1073,6 +1073,24 @@ export const useGameEngine = () => {
     addLog(`🐾 ${pet.icon} ${pet.name}을(를) 장착했습니다.`, 'normal');
   };
 
+  const handleUnequipWeapon = () => {
+    if (!player) return;
+    setPlayer({ ...player, weapon: null });
+    addLog(`⚔️ 무기를 해제했습니다.`, 'normal');
+  };
+
+  const handleUnequipArmor = () => {
+    if (!player) return;
+    setPlayer({ ...player, armor: null });
+    addLog(`🛡️ 방어구를 해제했습니다.`, 'normal');
+  };
+
+  const handleUnequipPet = () => {
+    if (!player) return;
+    setPlayer({ ...player, pet: null });
+    addLog(`🐾 펫을 해제했습니다.`, 'normal');
+  };
+
   const handleOpenPetEnhance = () => setGameState('petEnhance');
   const handleOpenWeaponEnhance = () => setGameState('weaponEnhance');
   const handleCloseEnhance = () => setGameState('dungeon');
@@ -1280,6 +1298,9 @@ export const useGameEngine = () => {
       handleEquipWeapon,
       handleEquipArmor,
       handleEquipPet,
+      handleUnequipWeapon,
+      handleUnequipArmor,
+      handleUnequipPet,
       handleOpenPetEnhance,
       handleOpenWeaponEnhance,
       handleEnhanceArmor,

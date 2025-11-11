@@ -152,6 +152,9 @@ function App() {
           onEquipWeapon={actions.handleEquipWeapon}
           onEquipArmor={actions.handleEquipArmor}
           onEquipPet={actions.handleEquipPet}
+          onUnequipWeapon={actions.handleUnequipWeapon}
+          onUnequipArmor={actions.handleUnequipArmor}
+          onUnequipPet={actions.handleUnequipPet}
         />
       )}
 

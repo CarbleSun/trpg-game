@@ -15,6 +15,9 @@ interface ShopScreenProps {
   onEquipWeapon?: (id: string) => void;
   onEquipArmor?: (id: string) => void;
   onEquipPet?: (id: string) => void;
+  onUnequipWeapon?: () => void;
+  onUnequipArmor?: () => void;
+  onUnequipPet?: () => void;
 }
 
 const TabButton = ({ label, isActive, onClick }: { label: string; isActive: boolean; onClick: () => void }) => (
@@ -44,7 +47,7 @@ const JobTabButton = ({ label, isActive, onClick }: { label: string; isActive: b
 );
 
 
-const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEquipWeapon, onEquipArmor, onEquipPet }: ShopScreenProps) => {
+const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEquipWeapon, onEquipArmor, onEquipPet, onUnequipWeapon, onUnequipArmor, onUnequipPet }: ShopScreenProps) => {
   const [activeTab, setActiveTab] = useState<ShopTab>('weapon');
   const [activeJobFilter, setActiveJobFilter] = useState<JobFilterTab>('ALL');
 
@@ -160,7 +163,12 @@ const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEqui
 															{!jobCanUse ? '직업 제한' : `구매 (${item.price} G)`}
 														</button>
                           ) : equipped ? (
-                            <button disabled className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs opacity-60">장착중</button>
+                            <button 
+                              onClick={() => onUnequipWeapon && onUnequipWeapon()}
+                              className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs hover:bg-red-600 hover:text-white"
+                            >
+                              장착해제
+                            </button>
                           ) : (
                             <button 
 															onClick={() => onEquipWeapon && onEquipWeapon(item.id)} 
@@ -212,7 +220,12 @@ const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEqui
 															{!jobCanUse ? '직업 제한' : `구매 (${item.price} G)`}
 														</button>
                           ) : equipped ? (
-                            <button disabled className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs opacity-60">장착중</button>
+                            <button 
+                              onClick={() => onUnequipArmor && onUnequipArmor()}
+                              className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs hover:bg-red-600 hover:text-white"
+                            >
+                              장착해제
+                            </button>
                           ) : (
                             <button 
 															onClick={() => onEquipArmor && onEquipArmor(item.id)} 
@@ -255,7 +268,12 @@ const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEqui
                           {!owned ? (
                             <button onClick={() => onBuyPet(pet.id)} disabled={!canAfford} className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs enabled:hover:bg-blue-700 enabled:hover:text-white disabled:opacity-50">구매 ({price} G)</button>
                           ) : equipped ? (
-                            <button disabled className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs opacity-60">장착중</button>
+                            <button 
+                              onClick={() => onUnequipPet && onUnequipPet()}
+                              className="w-full rounded border border-gray-700 px-3 py-1 font-stat text-xs hover:bg-red-600 hover:text-white"
+                            >
+                              장착해제
+                            </button>
                           ) : (
                             <button 
 															onClick={() => onEquipPet && onEquipPet(pet.id)} 
