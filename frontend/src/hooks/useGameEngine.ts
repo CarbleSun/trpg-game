@@ -587,8 +587,20 @@ export const useGameEngine = () => {
       // 2. 보스 스킬 사용 결정
       // 실제 존재하는 스킬만 필터링
       const availableSkillKeys = new Set(allSkills.map(s => s.key));
-      const availableSkills = (updatedBoss.skills || [])
-        .filter(key => availableSkillKeys.has(key))
+      // 보스 스킬 배열을 정리하여 유효한 스킬만 남김
+      const validBossSkills = (updatedBoss.skills || []).filter(key => {
+        if (typeof key !== 'string') return false;
+        return availableSkillKeys.has(key as SkillKey);
+      });
+      // 유효한 스킬이 없으면 빈 배열로 설정
+      if (validBossSkills.length === 0 && (updatedBoss.skills || []).length > 0) {
+        addLog(`⚠️ 보스의 스킬 목록에 유효하지 않은 스킬이 있어 제거되었습니다.`, 'fail');
+        updatedBoss.skills = [];
+      } else if (validBossSkills.length !== (updatedBoss.skills || []).length) {
+        updatedBoss.skills = validBossSkills;
+      }
+      
+      const availableSkills = validBossSkills
         .filter(key => ((updatedBoss.skillCooldowns || {})[key] || 0) <= 0);
       const SKILL_CHANCE = 50; // 50% 확률
       // let playerStunnedThisTurn = 0;
@@ -603,8 +615,8 @@ export const useGameEngine = () => {
           setIsProcessing(false);
           return;
         }
-        addLog(`👹 ${currentBoss.name}의 스킬! [${skill.name}]!`, 'cri');
         usedSkillKey = skillKey;
+        addLog(`👹 ${currentBoss.name}의 스킬! [${skill.name}]!`, 'cri');
 
         // 쿨다운 설정
         updatedBoss.skillCooldowns = { ...(updatedBoss.skillCooldowns || {}), [skillKey]: skill.cooldown };
@@ -630,7 +642,11 @@ export const useGameEngine = () => {
         }
 
         if (skill.effect?.type === 'timeStop') {
-          addLog(`⏰ [${skill.name}] 효과! 보스가 추가 턴을 얻습니다!`, 'vic');
+          if (skill && skill.name) {
+            addLog(`⏰ [${skill.name}] 효과! 보스가 추가 턴을 얻습니다!`, 'vic');
+          } else {
+            addLog(`⏰ 스킬 효과! 보스가 추가 턴을 얻습니다!`, 'vic');
+          }
           // 보스 상태 업데이트 후 재귀 호출
           setBoss(updatedBoss);
           setIsProcessing(false); // 현재 턴 종료 처리
@@ -641,7 +657,11 @@ export const useGameEngine = () => {
         if (skill.effect?.type === 'stun') {
           // 'monsterStunnedTurns'는 플레이어가 몬스터를 기절시킨 턴수
           // 보스가 플레이어를 기절시키는 로직은 현재 PlayerStats에 없음.
-          addLog(`💫 [${skill.name}] 효과! 플레이어가 기절...했어야 하지만 스턴 효과가 구현되지 않았습니다!`, 'fail');
+          if (skill && skill.name) {
+            addLog(`💫 [${skill.name}] 효과! 플레이어가 기절...했어야 하지만 스턴 효과가 구현되지 않았습니다!`, 'fail');
+          } else {
+            addLog(`💫 스킬 효과! 플레이어가 기절...했어야 하지만 스턴 효과가 구현되지 않았습니다!`, 'fail');
+          }
           // playerStunnedThisTurn = skill.effect.value; // (나중에 PlayerStats에 isStunnedTurns 추가 시 사용)
         }
       } 
