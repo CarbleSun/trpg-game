@@ -42,8 +42,7 @@ const DeveloperPanel = ({ onSave, onLoad, onDelete, onLoadFromFile, onLoadFromTe
 
   const handleLoad = () => {
     if (!slotInfos[selectedSlot - 1]) {
-      alert(`슬롯 ${selectedSlot}에 저장된 데이터가 없습니다.\n파일을 업로드하거나 텍스트를 붙여넣어주세요.`);
-      setShowLoadOptions(true);
+      alert(`슬롯 ${selectedSlot}에 저장된 데이터가 없습니다.`);
       return;
     }
     if (confirm(`슬롯 ${selectedSlot}에서 로드하시겠습니까?\n현재 진행사항은 저장되지 않습니다.`)) {
@@ -174,13 +173,6 @@ const DeveloperPanel = ({ onSave, onLoad, onDelete, onLoadFromFile, onLoadFromTe
           className="flex-1 rounded bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-700"
         >
           📂 로드
-        </button>
-        <button
-          onClick={() => setShowLoadOptions(!showLoadOptions)}
-          className="rounded bg-purple-600 px-3 py-1 text-xs text-white hover:bg-purple-700"
-          title="파일 업로드 또는 텍스트 붙여넣기"
-        >
-          📥 가져오기
         </button>
         <button
           onClick={handleDelete}
