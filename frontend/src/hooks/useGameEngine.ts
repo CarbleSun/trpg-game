@@ -246,13 +246,16 @@ export const useGameEngine = () => {
 
       addLog(`--- 몬스터의 턴 ---`, 'normal');
 
-      // 기절, 배리어, 회피 로직 (runMonsterTurn과 동일)
+      // 0. 보스 턴 시작 시, 보스 자신의 버프/쿨다운 틱
+      let updatedBoss = tickSkills(currentBoss); // (tickSkills는 PlayerStats | BossStats 둘 다 처리 가능)
+
+      // 1. 플레이어 상태 체크 (기절, 배리어, 회피)
       if ((currentPlayer.monsterStunnedTurns || 0) > 0) { 
         addLog(`💫 적이 기절하여 행동할 수 없다!`, 'fail');
         const nextPlayer = { ...currentPlayer, monsterStunnedTurns: (currentPlayer.monsterStunnedTurns || 0) - 1 };
         addLog(`--- 플레이어의 턴 ---`, 'normal');
         const ticked = tickSkills(nextPlayer);
-        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, currentBoss, getEffectivePlayerStats);
+        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, updatedBoss, getEffectivePlayerStats);
         addLogs(petLogs);
         setPlayer(playerAfterPet);
         setBoss(monsterAfterPet as BossStats);
@@ -274,7 +277,7 @@ export const useGameEngine = () => {
         const updatedAfterBarrier = { ...currentPlayer, activeBuffs: nextBuffs };
         addLog(`--- 플레이어의 턴 ---`, 'normal');
         const ticked = tickSkills(updatedAfterBarrier);
-        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, currentBoss, getEffectivePlayerStats);
+        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, updatedBoss, getEffectivePlayerStats);
         addLogs(petLogs);
         setPlayer(playerAfterPet);
         setBoss(monsterAfterPet as BossStats);
@@ -292,7 +295,7 @@ export const useGameEngine = () => {
         addLog(`🍃 스킬 효과로 보스의 공격을 회피했다!`, 'vic');
         addLog(`--- 플레이어의 턴 ---`, 'normal');
         const ticked = tickSkills(currentPlayer);
-        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, currentBoss, getEffectivePlayerStats);
+        const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, updatedBoss, getEffectivePlayerStats);
         addLogs(petLogs);
         setPlayer(playerAfterPet);
         setBoss(monsterAfterPet as BossStats);
@@ -306,20 +309,97 @@ export const useGameEngine = () => {
         return;
       }
 
-      // TODO: 보스 스킬 사용 로직 (여기서는 일반 공격만)
-      const weaken = (currentPlayer.activeBuffs || []).find(b => (b.weakenPercent || 0) > 0)?.weakenPercent || 0;
-      const attackerForTurn = weaken > 0 ? { ...currentBoss, atk: Math.max(1, Math.floor(currentBoss.atk * (1 - weaken))) } : currentBoss;
+      // 2. 보스 스킬 사용 결정
+      const availableSkills = (updatedBoss.skills || []).filter(key => ((updatedBoss.skillCooldowns || {})[key] || 0) <= 0);
+      const SKILL_CHANCE = 50; // 50% 확률
+      // let playerStunnedThisTurn = 0;
+      let usedSkillKey: SkillKey | null = null;
 
-      const effectivePlayer = getEffectivePlayerStats(currentPlayer);
+      if (availableSkills.length > 0 && getRandom(1, 100) <= SKILL_CHANCE) {
+        // --- 스킬 사용 ---
+        const skillKey = availableSkills[getRandom(0, availableSkills.length - 1)];
+        const skill = allSkills.find(s => s.key === skillKey)!;
+        addLog(`👹 ${currentBoss.name}의 스킬! [${skill.name}]!`, 'cri');
+        usedSkillKey = skillKey;
+
+        // 쿨다운 설정
+        updatedBoss.skillCooldowns = { ...(updatedBoss.skillCooldowns || {}), [skillKey]: skill.cooldown };
+
+        if (skill.kind === 'buff') {
+          const newBuff = {
+            key: skill.key,
+            remainingTurns: skill.duration || 1,
+            bonuses: skill.bonuses || {},
+            // (이하 모든 버프 효과)
+            evadeAll: skill.effect?.type === 'evade',
+            reflectPercent: skill.effect?.type === 'reflect' ? skill.effect.value : 0,
+            barrier: skill.effect?.type === 'barrier',
+            chargeAttackMultiplier: skill.effect?.type === 'charge' ? skill.effect.value : 0,
+            counterDamage: skill.effect?.type === 'counter' ? skill.effect.value : 0,
+            lifeStealPercent: skill.effect?.type === 'lifesteal' ? skill.effect.value : 0,
+            weakenPercent: skill.effect?.type === 'weaken' ? skill.effect.value : 0,
+            multiStrikeNext: skill.effect?.type === 'multiStrike',
+            trueStrikeNext: skill.effect?.type === 'trueStrike',
+          };
+          // 보스 자신에게 버프 적용
+          updatedBoss.activeBuffs = [...(updatedBoss.activeBuffs || []), newBuff];
+        }
+
+        if (skill.effect?.type === 'timeStop') {
+          addLog(`⏰ [${skill.name}] 효과! 보스가 추가 턴을 얻습니다!`, 'vic');
+          runBossTurn(currentPlayer, updatedBoss); // 즉시 턴 다시 실행
+          return; // 현재 턴 종료
+        }
+
+        if (skill.effect?.type === 'stun') {
+          // 'monsterStunnedTurns'는 플레이어가 몬스터를 기절시킨 턴수
+          // 보스가 플레이어를 기절시키는 로직은 현재 PlayerStats에 없음.
+          addLog(`💫 [${skill.name}] 효과! 플레이어가 기절...했어야 하지만 스턴 효과가 구현되지 않았습니다!`, 'fail');
+          // playerStunnedThisTurn = skill.effect.value; // (나중에 PlayerStats에 isStunnedTurns 추가 시 사용)
+        }
+      } 
+      
+      // 3. 스킬 사용 후 또는 일반 공격
+      // (스킬이 공격 스킬이 아니었거나(버프), 스킬을 사용하지 않았을 경우)
+      // (단, 'THEWORLD' 스킬은 위에서 return 되어 이 로직을 실행하지 않음)
+      const weaken = (currentPlayer.activeBuffs || []).find(b => (b.weakenPercent || 0) > 0)?.weakenPercent || 0;
+      
+      // 보스의 차지/트루스트라이크 등 버프 적용
+      const charge = (updatedBoss.activeBuffs || []).find(b => (b.chargeAttackMultiplier || 0) > 0)?.chargeAttackMultiplier || 0;
+      const trueStrike = (updatedBoss.activeBuffs || []).some(b => b.trueStrikeNext);
+      
+      let attackerForTurn = { ...updatedBoss, atk: Math.max(1, Math.floor(updatedBoss.atk * (1 - weaken))) };
+      if (charge > 0) {
+        attackerForTurn.atk = Math.floor(attackerForTurn.atk * (1 + charge));
+        addLog(`👹 [${usedSkillKey}] 효과! 보스의 공격력 증폭!`, 'cri');
+      }
+
+      let effectivePlayer = getEffectivePlayerStats(currentPlayer);
+      if (trueStrike) {
+        effectivePlayer.def = 0; // 방어 무시
+        addLog(`🎯 [${usedSkillKey}] 효과! 보스의 공격이 방어를 무시합니다!`, 'cri');
+      }
+
+      // 공격 실행
       const result = calculateAttack(attackerForTurn, effectivePlayer); // 순수 로직
       addLogs(result.logs);
 
       let updatedPlayer = { ...currentPlayer, hp: result.defender.hp, isDefending: false }; // 방어 상태 해제
+      // (만약 보스가 스턴 스킬을 썼다면) updatedPlayer.isStunnedTurns = playerStunnedThisTurn;
+
+      // 버프 제거
+      if (charge > 0) {
+        const chargeIdx = (updatedBoss.activeBuffs || []).findIndex(b => b.chargeAttackMultiplier);
+        if (chargeIdx >= 0) updatedBoss.activeBuffs!.splice(chargeIdx, 1);
+      }
+      if (trueStrike) {
+        const trueStrikeIdx = (updatedBoss.activeBuffs || []).findIndex(b => b.trueStrikeNext);
+        if (trueStrikeIdx >= 0) updatedBoss.activeBuffs!.splice(trueStrikeIdx, 1);
+      }
+      
       setPlayer(updatedPlayer);
       
-      let updatedBoss = { ...currentBoss };
-
-      // 반사/카운터 로직
+      // 4. 반사/카운터 로직
       const reflect = (currentPlayer.activeBuffs || []).find(b => (b.reflectPercent || 0) > 0)?.reflectPercent || 0;
       const last = result.logs[result.logs.length - 1];
       const match = last?.msg.match(/(\d+)의 데미지를/);
@@ -328,12 +408,14 @@ export const useGameEngine = () => {
         const reflectDmg = Math.floor(dealt * reflect);
         updatedBoss.hp = Math.max(0, updatedBoss.hp - reflectDmg);
         addLog(`🔄 스킬 효과로 ${reflectDmg}의 피해를 반사! (적 HP: ${updatedBoss.hp})`, 'vic');
-        setBoss(updatedBoss);
       }
+      setBoss(updatedBoss); // 보스 상태 최종 업데이트
 
+      // 5. 전투 종료 확인
       if (result.isBattleOver) {
          handleBossBattleEnd('defeat', updatedPlayer, currentBoss);
       } else {
+        // 6. 플레이어 턴으로 전환
         addLog(`--- 플레이어의 턴 ---`, 'normal');
         const ticked = tickSkills(updatedPlayer); // 순수 로직
         const { player: playerAfterPet, monster: monsterAfterPet, logs: petLogs } = applyPetStartOfTurn(ticked, updatedBoss, getEffectivePlayerStats); // 순수 로직
@@ -384,7 +466,7 @@ export const useGameEngine = () => {
       playerAfterBattle = levelUpResult.newPlayer;
       logs.push(...levelUpResult.logs);
 
-      // --- 보스 드롭 로직
+      // 보스 드롭 로직
       const DROP_CHANCE = 30; // 30% 확률
       if (getRandom(1, 100) <= DROP_CHANCE && bossRewardPool.length > 0) {
         didDropItem = true;
@@ -403,7 +485,6 @@ export const useGameEngine = () => {
       } else {
         logs.push({ msg: `💨 아쉽지만, 특별한 아이템은 나오지 않았습니다...`, type: 'fail' });
       }
-      // --- 보스 드롭 로직 끝 ---
 
       // 보스 던전 쿨타임 설정
       const newCooldowns = {
@@ -517,17 +598,16 @@ export const useGameEngine = () => {
     setCurrentBossDungeonId(null);
     addLog('던전에서 퇴장했습니다.', 'normal');
   };
-  // ---
 
-  // --- 1. 게임 시작 ---
+  // 게임 시작
   const gameStart = (name: string, job: Job) => {
     const newPlayer = createNewPlayer(name, job); // 순수 로직
     setPlayer(newPlayer);
-    setGameState('dungeonSelect'); // 'dungeon' -> 'dungeonSelect'
+    setGameState('dungeon');
     addLog(`🥾 ${newPlayer.name} (${newPlayer.job}) (이)가 모험을 시작했다...`);
   };
 
-  // --- 2. 던전 선택 및 액션 ---
+  // 던전 선택 및 액션
   const handleSelectDungeon = (dungeonId: string) => {
     const dungeon = dungeons.find(d => d.id === dungeonId); // ⚠️ 누락된 변수 정의
     if (!player || !dungeon) return;
@@ -623,7 +703,6 @@ export const useGameEngine = () => {
     }, 1000);
   };
   
-  // --- (누락된 함수 추가) ---
   const handleDungeonRecovery = () => {
     if (isProcessing || !player) return;
     
@@ -640,9 +719,8 @@ export const useGameEngine = () => {
     setPlayer({ ...player, hp: newHp });
     addLog(`😊 체력을 회복했다. (HP: ${newHp})`, 'normal');
   };
-  // ---
 
-  // --- 3. 전투 액션 ---
+  // 전투 액션
   const handleAttack = () => {
     if (isProcessing || !isPlayerTurn || !player || !(monster || boss)) return;
     setIsPlayerTurn(false);
@@ -651,6 +729,8 @@ export const useGameEngine = () => {
     const effectivePlayer = getEffectivePlayerStats(player); // 순수 로직
     const defenderStats = boss ? (boss as CharacterStats) : (monster as CharacterStats); 
   
+		let defenderBuffs = boss ? (boss.activeBuffs || []) : []; // 몬스터는 버프 없음
+
     const isBonusAttack = consecutiveMisses >= 3;
   
     // 차지/트루 스트라이크 버프 처리
@@ -670,6 +750,32 @@ export const useGameEngine = () => {
     }
 
     addLogs(logs); // 차지/트루 스트라이크 로그 먼저 출력
+
+		if (boss) {
+      const barrierIdx = defenderBuffs.findIndex(b => b.barrier);
+      if (barrierIdx >= 0) {
+        const skillName = defenderBuffs[barrierIdx].key;
+        addLog(`🛡️ 몬스터의 [${skillName}] 스킬이 공격을 무효화했다!`, 'fail');
+        const nextBuffs = [...defenderBuffs];
+        nextBuffs.splice(barrierIdx, 1);
+
+        // 1. 새로운 boss 객체를 변수로 생성
+        const updatedBoss = { ...boss, activeBuffs: nextBuffs };
+
+        // 2. setBoss와 runBossTurn에 *동일한* 새 객체를 전달
+        setBoss(updatedBoss);
+        runBossTurn(player, updatedBoss); // 턴 넘김
+        return;
+      }
+      
+      const hasEvade = defenderBuffs.some(b => b.evadeAll);
+      if (hasEvade) {
+        addLog(`🍃 몬스터가 스킬 효과로 공격을 회피했다!`, 'fail');
+        runBossTurn(player, boss); // (이 코드는 보스 상태 변경이 없으므로 그대로 둬도 됩니다)
+        return;
+      }
+    }
+
     let result = calculateAttack(chargedStats, defenderStats, isBonusAttack); // 순수 로직
     addLogs(result.logs);
     
@@ -723,7 +829,6 @@ export const useGameEngine = () => {
     }
   };
   
-  // --- (누락된 함수 추가) ---
   const handleDefend = () => {
     if (isProcessing || !isPlayerTurn || !player) return;
     setIsPlayerTurn(false);
@@ -774,7 +879,6 @@ export const useGameEngine = () => {
       runMonsterTurn(recoveredPlayer, monster);
     }
   };
-  // ---
 
   const handleUseSkill = (key: SkillKey) => {
     if (isProcessing || !isPlayerTurn || !player || !(monster || boss)) return;
@@ -865,7 +969,6 @@ export const useGameEngine = () => {
     }
   };
   
-  // --- (누락된 함수 추가) ---
   const handleEscape = () => {
     if (isProcessing || !isPlayerTurn || !player || !(monster || boss)) return;
     setIsPlayerTurn(false);
@@ -891,9 +994,8 @@ export const useGameEngine = () => {
       }
     }, 1000);
   };
-  // ---
 
-	// --- 4. 상점/스킬/강화소 액션 ---
+	// 상점/스킬/강화소 액션
   const handleEnterShop = () => setGameState('shop');
   const handleExitShop = () => setGameState('dungeon');
   const handleOpenSkills = () => setIsSkillsOpen(true);
@@ -1038,7 +1140,7 @@ export const useGameEngine = () => {
     addLog(`✨ ${player.weapon.name} 강화 성공! [${newLevel}강]`, 'vic');
   };
 
-	// --- 5. 보스 보상 액션 ---
+	// 보스 보상 액션
   const handleBossRewardAction = (action: 'equip' | 'sell' | 'ignore', reward: BossReward) => {
     if (!player) return;
     let updatedPlayer = { ...player };
@@ -1098,6 +1200,11 @@ export const useGameEngine = () => {
   const handleKeyDown = (key: string) => {
     if (isProcessing) return; 
 
+		if (isSkillsOpen) {
+      if (key === 'k' || key === 'q') handleCloseSkills();
+      return; // 모달이 열려있으면 다른 키 입력 무시
+    }
+
     if (gameState === 'dungeon') {
       if (!showBattleChoice) {
         if (key === 's') handleOpenDungeonSelect(); // 던전 탐험
@@ -1120,12 +1227,9 @@ export const useGameEngine = () => {
         if (key === 'd') handleDefend();
         if (key === 'e') handleRecovery();
         if (key === 'q') handleEscape();
-        // (스킬 단축키 로D(A, D, E, Q)
 			}
     } else if (gameState === 'shop') {
       if (key === 'h' || key === 'q') handleExitShop();
-    } else if (isSkillsOpen) {
-      if (key === 'k' || key === 'q') handleCloseSkills();
     } else if (gameState === 'petEnhance' || gameState === 'weaponEnhance') {
       if (key === 'q') handleCloseEnhance();
     } else if (gameState === 'dungeonSelect') {
@@ -1135,9 +1239,7 @@ export const useGameEngine = () => {
     }
     // 보상 모달은 키보드 입력을 막습니다 (버튼 클릭만 허용)
   };
-  // ---
 
-  // --- 6. Return 문 ---
   return {
     player,
     monster: boss || monster,
