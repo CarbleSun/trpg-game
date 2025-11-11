@@ -53,6 +53,272 @@ export const useGameEngine = () => {
     return stored ? JSON.parse(stored) : {};
   });
   const [bossReward, setBossReward] = useState<BossReward | null>(null);
+  const [isDeveloperMode, setIsDeveloperMode] = useState(false);
+
+  // Electron API 타입 정의
+  type ElectronAPI = {
+    saveGameState: (slot: number, gameState: any) => Promise<{ success: boolean; path?: string; error?: string }>;
+    loadGameState: (slot: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+    deleteGameSlot: (slot: number) => Promise<{ success: boolean; error?: string }>;
+    getSaveSlotInfo: (slot: number) => Promise<{ success: boolean; info?: any; error?: string }>;
+  };
+
+  const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
+  const isElectron = !!electronAPI;
+
+  /**
+   * 개발자 모드 활성화
+   */
+  const enableDeveloperMode = () => {
+    setIsDeveloperMode(true);
+    addLog('🔧 개발자 모드가 활성화되었습니다.', 'normal');
+  };
+
+  /**
+   * 게임 상태 저장 (슬롯 번호 지정) - 프로젝트 saves 폴더에 저장
+   */
+  const saveGameState = async (slot: number = 1) => {
+    if (!player) {
+      addLog('🚫 저장할 게임 상태가 없습니다.', 'fail');
+      return;
+    }
+    
+    const gameStateToSave = {
+      player,
+      bossCooldowns,
+      dungeonKillCounts,
+      logMessages: logMessages.slice(-50), // 최근 50개 로그만 저장
+      timestamp: Date.now(),
+      slot,
+    };
+    
+    if (isElectron && electronAPI) {
+      // Electron 환경: 파일 시스템에 직접 저장
+      try {
+        const result = await electronAPI.saveGameState(slot, gameStateToSave);
+        if (result.success) {
+          addLog(`💾 슬롯 ${slot}에 게임 상태가 저장되었습니다. (프로젝트 saves 폴더)`, 'vic');
+        } else {
+          addLog(`🚫 저장 실패: ${result.error}`, 'fail');
+        }
+      } catch (error) {
+        addLog(`🚫 저장 중 오류가 발생했습니다.`, 'fail');
+      }
+    } else {
+      // 브라우저 환경: 개발 서버 API를 통해 저장
+      try {
+        const response = await fetch('/api/save-game-state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slot, gameState: gameStateToSave }),
+        });
+        const result = await response.json();
+        if (result.success) {
+          addLog(`💾 슬롯 ${slot}에 게임 상태가 저장되었습니다. (프로젝트 saves 폴더)`, 'vic');
+        } else {
+          addLog(`🚫 저장 실패: ${result.error}`, 'fail');
+        }
+      } catch (error) {
+        addLog(`🚫 저장 중 오류가 발생했습니다.`, 'fail');
+      }
+    }
+  };
+
+  /**
+   * 게임 상태 로드 (슬롯 번호 지정) - 프로젝트 saves 폴더에서 로드
+   */
+  const loadGameState = async (slot: number = 1) => {
+    if (isElectron && electronAPI) {
+      // Electron 환경: 파일 시스템에서 직접 로드
+      try {
+        const result = await electronAPI.loadGameState(slot);
+        if (result.success && result.data) {
+          const gameState = result.data;
+          setPlayer(gameState.player);
+          setBossCooldowns(gameState.bossCooldowns || {});
+          setDungeonKillCounts(gameState.dungeonKillCounts || {});
+          if (gameState.logMessages) {
+            setLogMessages(gameState.logMessages);
+          }
+          setGameState('dungeon');
+          setMonster(null);
+          setBoss(null);
+          setIsPlayerTurn(true);
+          setIsProcessing(false);
+          addLog(`📂 슬롯 ${slot}에서 게임 상태가 로드되었습니다. (프로젝트 saves 폴더)`, 'vic');
+        } else {
+          addLog(`🚫 슬롯 ${slot}에 저장된 게임 상태가 없습니다.`, 'fail');
+        }
+      } catch (error) {
+        addLog('🚫 게임 상태 로드에 실패했습니다.', 'fail');
+      }
+    } else {
+      // 브라우저 환경: 개발 서버 API를 통해 로드
+      try {
+        const response = await fetch(`/api/load-game-state?slot=${slot}`);
+        const result = await response.json();
+        if (result.success && result.data) {
+          const gameState = result.data;
+          setPlayer(gameState.player);
+          setBossCooldowns(gameState.bossCooldowns || {});
+          setDungeonKillCounts(gameState.dungeonKillCounts || {});
+          if (gameState.logMessages) {
+            setLogMessages(gameState.logMessages);
+          }
+          setGameState('dungeon');
+          setMonster(null);
+          setBoss(null);
+          setIsPlayerTurn(true);
+          setIsProcessing(false);
+          addLog(`📂 슬롯 ${slot}에서 게임 상태가 로드되었습니다. (프로젝트 saves 폴더)`, 'vic');
+        } else {
+          addLog(`🚫 슬롯 ${slot}에 저장된 게임 상태가 없습니다.`, 'fail');
+        }
+      } catch (error) {
+        addLog('🚫 게임 상태 로드에 실패했습니다.', 'fail');
+      }
+    }
+  };
+
+  /**
+   * 파일에서 게임 상태 로드 - 프로젝트 saves 폴더에 저장
+   */
+  const loadGameStateFromFile = (file: File, slot: number) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const gameState = JSON.parse(e.target?.result as string);
+        if (isElectron && electronAPI) {
+          // Electron 환경: 파일 시스템에 저장
+          const result = await electronAPI.saveGameState(slot, gameState);
+          if (result.success) {
+            addLog(`📂 슬롯 ${slot}에 파일이 로드되었습니다. "로드" 버튼을 눌러 게임 상태를 적용하세요.`, 'vic');
+          } else {
+            addLog(`🚫 파일 저장 실패: ${result.error}`, 'fail');
+          }
+        } else {
+          // 브라우저 환경: 개발 서버 API를 통해 저장
+          try {
+            const response = await fetch('/api/save-game-state', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ slot, gameState }),
+            });
+            const result = await response.json();
+            if (result.success) {
+              addLog(`📂 슬롯 ${slot}에 파일이 로드되었습니다. "로드" 버튼을 눌러 게임 상태를 적용하세요.`, 'vic');
+            } else {
+              addLog(`🚫 파일 저장 실패: ${result.error}`, 'fail');
+            }
+          } catch (error) {
+            addLog('🚫 파일 저장 중 오류가 발생했습니다.', 'fail');
+          }
+        }
+      } catch (error) {
+        addLog('🚫 파일 형식이 올바르지 않습니다.', 'fail');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  /**
+   * 텍스트에서 게임 상태 로드 - 프로젝트 saves 폴더에 저장
+   */
+  const loadGameStateFromText = async (text: string, slot: number) => {
+    try {
+      const gameState = JSON.parse(text);
+      if (isElectron && electronAPI) {
+        // Electron 환경: 파일 시스템에 저장
+        const result = await electronAPI.saveGameState(slot, gameState);
+        if (result.success) {
+          addLog(`📂 슬롯 ${slot}에 텍스트가 로드되었습니다. "로드" 버튼을 눌러 게임 상태를 적용하세요.`, 'vic');
+        } else {
+          addLog(`🚫 텍스트 저장 실패: ${result.error}`, 'fail');
+        }
+      } else {
+        // 브라우저 환경: 개발 서버 API를 통해 저장
+        try {
+          const response = await fetch('/api/save-game-state', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slot, gameState }),
+          });
+          const result = await response.json();
+          if (result.success) {
+            addLog(`📂 슬롯 ${slot}에 텍스트가 로드되었습니다. "로드" 버튼을 눌러 게임 상태를 적용하세요.`, 'vic');
+          } else {
+            addLog(`🚫 텍스트 저장 실패: ${result.error}`, 'fail');
+          }
+        } catch (error) {
+          addLog('🚫 텍스트 저장 중 오류가 발생했습니다.', 'fail');
+        }
+      }
+    } catch (error) {
+      addLog('🚫 텍스트 형식이 올바르지 않습니다.', 'fail');
+    }
+  };
+
+  /**
+   * 특정 슬롯의 저장 상태 확인 - 프로젝트 saves 폴더에서 확인
+   */
+  const getSaveSlotInfo = async (slot: number) => {
+    if (isElectron && electronAPI) {
+      try {
+        const result = await electronAPI.getSaveSlotInfo(slot);
+        if (result.success) {
+          return result.info;
+        }
+        return null;
+      } catch (error) {
+        return null;
+      }
+    } else {
+      // 브라우저 환경: 개발 서버 API를 통해 확인
+      try {
+        const response = await fetch(`/api/get-save-slot-info?slot=${slot}`);
+        const result = await response.json();
+        if (result.success) {
+          return result.info;
+        }
+        return null;
+      } catch (error) {
+        return null;
+      }
+    }
+  };
+
+  /**
+   * 특정 슬롯의 저장 데이터 삭제 - 프로젝트 saves 폴더에서 삭제
+   */
+  const deleteGameSlot = async (slot: number) => {
+    if (isElectron && electronAPI) {
+      try {
+        const result = await electronAPI.deleteGameSlot(slot);
+        if (result.success) {
+          addLog(`🗑️ 슬롯 ${slot}의 저장 데이터가 삭제되었습니다.`, 'normal');
+        } else {
+          addLog(`🚫 슬롯 ${slot}에 저장된 데이터가 없습니다.`, 'fail');
+        }
+      } catch (error) {
+        addLog('🚫 삭제 중 오류가 발생했습니다.', 'fail');
+      }
+    } else {
+      // 브라우저 환경: 개발 서버 API를 통해 삭제
+      try {
+        const response = await fetch(`/api/delete-game-slot?slot=${slot}`, {
+          method: 'DELETE',
+        });
+        const result = await response.json();
+        if (result.success) {
+          addLog(`🗑️ 슬롯 ${slot}의 저장 데이터가 삭제되었습니다.`, 'normal');
+        } else {
+          addLog(`🚫 슬롯 ${slot}에 저장된 데이터가 없습니다.`, 'fail');
+        }
+      } catch (error) {
+        addLog('🚫 삭제 중 오류가 발생했습니다.', 'fail');
+      }
+    }
+  };
 
   /**
    * 로그 추가 유틸리티
@@ -1276,6 +1542,7 @@ export const useGameEngine = () => {
     bossCooldowns,
     shopLists: { weapons: weaponShopList, armors: armorShopList, pets: petShopList },
 		bossReward,
+    isDeveloperMode,
     actions: {
       gameStart,
       handleSelectDungeon,
@@ -1314,6 +1581,13 @@ export const useGameEngine = () => {
       handleContinueBattle,
       handleExitDungeon,
 			handleBossRewardAction,
+      enableDeveloperMode,
+      saveGameState,
+      loadGameState,
+      getSaveSlotInfo,
+      deleteGameSlot,
+      loadGameStateFromFile,
+      loadGameStateFromText,
     },
   };
 };

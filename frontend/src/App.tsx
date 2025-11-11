@@ -12,6 +12,7 @@ import SkillsScreen from './components/SkillsScreen';
 import DungeonSelectionScreen from './components/DungeonSelectionScreen';
 import BossSelectionScreen from './components/BossSelectionScreen';
 import BossRewardModal from './components/BossRewardModal';
+import DeveloperPanel from './components/DeveloperPanel';
 import { useGameEngine } from './hooks/useGameEngine';
 
 function App() {
@@ -31,6 +32,7 @@ function App() {
     bossDungeons,
     bossCooldowns,
 		bossReward,
+    isDeveloperMode,
     actions,
   } = useGameEngine();
 
@@ -47,9 +49,65 @@ function App() {
   }, [actions]); // actions는 메모이제이션되어 있다고 가정 (useCallback 사용 시)
   // *참고: useGameEngine에서 actions 객체를 useCallback으로 감싸면 더 최적화할 수 있습니다.
 
+  // 개발자 모드 콘솔 명령어 등록
+  useEffect(() => {
+    // 콘솔에서 직접 호출 가능한 함수
+    // 사용법: enableDevMode() 또는 window.enableDevMode()
+    // @ts-ignore
+    window.enableDevMode = () => {
+      actions.enableDeveloperMode();
+    };
+    
+    // 개발자 코드 입력 감지
+    let devCodeBuffer = '';
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Ctrl+Shift+D로 개발자 모드 활성화
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        actions.enableDeveloperMode();
+        return;
+      }
+      
+      // "mamat1234" 입력 시 개발자 모드 활성화
+      if (e.key.length === 1) {
+        devCodeBuffer += e.key.toLowerCase();
+        if (devCodeBuffer.length > 15) {
+          devCodeBuffer = devCodeBuffer.slice(-15);
+        }
+        if (devCodeBuffer.includes('mamat1234')) {
+          actions.enableDeveloperMode();
+          devCodeBuffer = '';
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPress);
+    
+    return () => {
+      // @ts-ignore
+      delete window.enableDevMode;
+      window.removeEventListener('keydown', handleKeyPress);
+    };
+  }, [actions]);
+
   // 1. 설정 화면 (캐릭터 생성)
   if (gameState === 'setup' || !player) {
-    return <SetupScreen onGameStart={actions.gameStart} />;
+    return (
+      <>
+        <SetupScreen onGameStart={actions.gameStart} />
+        {/* 개발자 모드 패널 (게임 시작 전에도 표시) */}
+        {isDeveloperMode && (
+          <DeveloperPanel
+            onSave={actions.saveGameState}
+            onLoad={actions.loadGameState}
+            onDelete={actions.deleteGameSlot}
+            onLoadFromFile={actions.loadGameStateFromFile}
+            onLoadFromText={actions.loadGameStateFromText}
+            getSaveSlotInfo={actions.getSaveSlotInfo}
+          />
+        )}
+      </>
+    );
   }
 
   // 2. 던전 선택 화면
@@ -192,6 +250,18 @@ function App() {
           player={player}
           reward={bossReward}
           onAction={actions.handleBossRewardAction}
+        />
+      )}
+
+      {/* 개발자 모드 패널 */}
+      {isDeveloperMode && (
+        <DeveloperPanel
+          onSave={actions.saveGameState}
+          onLoad={actions.loadGameState}
+          onDelete={actions.deleteGameSlot}
+          onLoadFromFile={actions.loadGameStateFromFile}
+          onLoadFromText={actions.loadGameStateFromText}
+          getSaveSlotInfo={actions.getSaveSlotInfo}
         />
       )}
 

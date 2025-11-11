@@ -1,0 +1,60 @@
+{
+  "player": {
+    "name": "ㅁ",
+    "job": "전사",
+    "level": 1,
+    "hp": 90,
+    "maxHp": 90,
+    "atk": 22,
+    "def": 57,
+    "luk": 8,
+    "exp": 0,
+    "money": 0,
+    "goalExp": 150,
+    "vicCount": 0,
+    "defCount": 0,
+    "weapon": {
+      "id": "w_starter_club",
+      "name": "나무 몽둥이",
+      "type": "weapon",
+      "value": 4,
+      "price": 0,
+      "allowedJobs": [
+        "전사",
+        "마법사",
+        "도적"
+      ]
+    },
+    "armor": null,
+    "pet": null,
+    "weaponEnhanceLevels": {},
+    "armorEnhanceLevels": {},
+    "petEnhanceLevels": {},
+    "ownedWeaponIds": [
+      "w_starter_club"
+    ],
+    "ownedArmorIds": [],
+    "ownedPetIds": [],
+    "skillPoints": 0,
+    "skills": [],
+    "skillUpgradeLevels": {}
+  },
+  "bossCooldowns": {},
+  "dungeonKillCounts": {
+    "forest": 1
+  },
+  "logMessages": [
+    {
+      "id": 1762866224028,
+      "msg": "🥾 ㅁ (전사) (이)가 모험을 시작했다...",
+      "type": "normal"
+    },
+    {
+      "id": 1762866227736,
+      "msg": "🔧 개발자 모드가 활성화되었습니다.",
+      "type": "normal"
+    }
+  ],
+  "timestamp": 1762866231240,
+  "slot": 1
+}
