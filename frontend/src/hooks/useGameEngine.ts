@@ -505,7 +505,7 @@ export const useGameEngine = () => {
     setIsProcessing(true);
     
     setTimeout(() => {
-      if (!player) {
+      if (!currentPlayer) {
          setIsProcessing(false);
          return;
       }
@@ -576,7 +576,11 @@ export const useGameEngine = () => {
       }
 
       // 2. 보스 스킬 사용 결정
-      const availableSkills = (updatedBoss.skills || []).filter(key => ((updatedBoss.skillCooldowns || {})[key] || 0) <= 0);
+      // 실제 존재하는 스킬만 필터링
+      const availableSkillKeys = new Set(allSkills.map(s => s.key));
+      const availableSkills = (updatedBoss.skills || [])
+        .filter(key => availableSkillKeys.has(key))
+        .filter(key => ((updatedBoss.skillCooldowns || {})[key] || 0) <= 0);
       const SKILL_CHANCE = 50; // 50% 확률
       // let playerStunnedThisTurn = 0;
       let usedSkillKey: SkillKey | null = null;
@@ -584,7 +588,12 @@ export const useGameEngine = () => {
       if (availableSkills.length > 0 && getRandom(1, 100) <= SKILL_CHANCE) {
         // --- 스킬 사용 ---
         const skillKey = availableSkills[getRandom(0, availableSkills.length - 1)];
-        const skill = allSkills.find(s => s.key === skillKey)!;
+        const skill = allSkills.find(s => s.key === skillKey);
+        if (!skill) {
+          addLog(`⚠️ 보스가 알 수 없는 스킬을 사용하려고 했습니다: ${skillKey}`, 'fail');
+          setIsProcessing(false);
+          return;
+        }
         addLog(`👹 ${currentBoss.name}의 스킬! [${skill.name}]!`, 'cri');
         usedSkillKey = skillKey;
 
@@ -613,6 +622,9 @@ export const useGameEngine = () => {
 
         if (skill.effect?.type === 'timeStop') {
           addLog(`⏰ [${skill.name}] 효과! 보스가 추가 턴을 얻습니다!`, 'vic');
+          // 보스 상태 업데이트 후 재귀 호출
+          setBoss(updatedBoss);
+          setIsProcessing(false); // 현재 턴 종료 처리
           runBossTurn(currentPlayer, updatedBoss); // 즉시 턴 다시 실행
           return; // 현재 턴 종료
         }

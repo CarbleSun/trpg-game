@@ -529,18 +529,41 @@ export const createBoss = (bossLevel: number): BossStats => {
   const bossName = bossNames[bossLevel] || `보스 ${bossLevel}`;
 
   // 보스가 사용할 수 있는 스킬 (레벨에 따라 다름)
+  // 실제 skills 배열에 존재하는 스킬만 필터링하여 추가
+  const availableSkillKeys = new Set(skills.map(s => s.key));
   const bossSkills: SkillKey[] = [];
+  
   if (bossLevel >= 5) {
-    bossSkills.push("hex", "ironWill", "shadowVeil");
+    const level5Skills: SkillKey[] = ["hex", "ironWill", "shadowVeil"];
+    level5Skills.forEach(skillKey => {
+      if (availableSkillKeys.has(skillKey)) {
+        bossSkills.push(skillKey);
+      }
+    });
   }
   if (bossLevel >= 10) {
-    bossSkills.push("battleCryWar", "cleave", "bladeFlurry");
+    const level10Skills: SkillKey[] = ["battleCryWar", "cleave", "bladeFlurry"];
+    level10Skills.forEach(skillKey => {
+      if (availableSkillKeys.has(skillKey)) {
+        bossSkills.push(skillKey);
+      }
+    });
   }
   if (bossLevel >= 15) {
-    bossSkills.push("warSmash", "crushingRoar", "flurry");
+    const level15Skills: SkillKey[] = ["warSmash", "crushingRoar", "flurry"];
+    level15Skills.forEach(skillKey => {
+      if (availableSkillKeys.has(skillKey)) {
+        bossSkills.push(skillKey);
+      }
+    });
   }
   if (bossLevel >= 20) {
-    bossSkills.push("berserkRush", "vampiricAura", "THEWORLD");
+    const level20Skills: SkillKey[] = ["berserkRush", "vampiricAura", "THEWORLD"];
+    level20Skills.forEach(skillKey => {
+      if (availableSkillKeys.has(skillKey)) {
+        bossSkills.push(skillKey);
+      }
+    });
   }
 
   return {
