@@ -7,11 +7,12 @@ interface DeveloperPanelProps {
   onLoadFromFile: (file: File, slot: number) => void;
   onLoadFromText: (text: string, slot: number) => void;
   getSaveSlotInfo: (slot: number) => Promise<{ exists: boolean; timestamp: number; playerName: string; playerLevel: number } | null>;
+  onResetAllBossCooldowns: () => void;
 }
 
-const SLOT_COUNT = 5;
+const SLOT_COUNT = 10;
 
-const DeveloperPanel = ({ onSave, onLoad, onDelete, onLoadFromFile, onLoadFromText, getSaveSlotInfo }: DeveloperPanelProps) => {
+const DeveloperPanel = ({ onSave, onLoad, onDelete, onLoadFromFile, onLoadFromText, getSaveSlotInfo, onResetAllBossCooldowns }: DeveloperPanelProps) => {
   const [selectedSlot, setSelectedSlot] = useState(1);
   const [slotInfos, setSlotInfos] = useState<Array<{ exists: boolean; timestamp: number; playerName: string; playerLevel: number } | null>>([]);
   const [showLoadOptions, setShowLoadOptions] = useState(false);
@@ -180,6 +181,20 @@ const DeveloperPanel = ({ onSave, onLoad, onDelete, onLoadFromFile, onLoadFromTe
           className="rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           🗑️ 삭제
+        </button>
+      </div>
+
+      {/* 보스 타이머 초기화 버튼 */}
+      <div className="mt-3 border-t border-gray-700 pt-3">
+        <button
+          onClick={() => {
+            if (confirm('모든 보스 타이머를 초기화하시겠습니까?')) {
+              onResetAllBossCooldowns();
+            }
+          }}
+          className="w-full rounded bg-purple-600 px-3 py-1 text-xs text-white hover:bg-purple-700"
+        >
+          ⏰ 모든 보스 타이머 초기화
         </button>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { PlayerStats, EquipmentItem, Job } from '../game/types';
 import type { useGameEngine } from '../hooks/useGameEngine';
+import { getItemGrade, getGradeColorClass, getGradeBorderClass } from '../game/utils';
 
 type ShopLists = ReturnType<typeof useGameEngine>['shopLists'];
 type ShopTab = 'weapon' | 'armor' | 'pet';
@@ -139,12 +140,15 @@ const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEqui
                     const jobCanUse = !item.allowedJobs || item.allowedJobs.includes(player.job);
                     
                     const jobText = getJobText(item);
+                    const grade = getItemGrade(item.price);
+                    const gradeColorClass = getGradeColorClass(grade);
+                    const gradeBorderClass = getGradeBorderClass(grade);
 
                     return (
-                      <div key={item.id} className="flex flex-col justify-between rounded border border-gray-300 p-3">
+                      <div key={item.id} className={`flex flex-col justify-between rounded border-2 ${gradeBorderClass} p-3`}>
                         <div>
-                          <div className="text-sm font-bold">
-                            {item.name}
+                          <div className={`text-sm font-bold ${gradeColorClass}`}>
+                            {item.name}({grade})
                             {(() => {
                               const lvl = (player.weaponEnhanceLevels || {})[item.id] || 0;
                               return lvl > 0 ? ` [${lvl}강]` : '';
@@ -196,12 +200,15 @@ const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEqui
                     const jobCanUse = !item.allowedJobs || item.allowedJobs.includes(player.job);
 
                     const jobText = getJobText(item);
+                    const grade = getItemGrade(item.price);
+                    const gradeColorClass = getGradeColorClass(grade);
+                    const gradeBorderClass = getGradeBorderClass(grade);
 
                     return (
-                      <div key={item.id} className="flex flex-col justify-between rounded border border-gray-300 p-3">
+                      <div key={item.id} className={`flex flex-col justify-between rounded border-2 ${gradeBorderClass} p-3`}>
                          <div>
-                          <div className="text-sm font-bold">
-                            {item.name}
+                          <div className={`text-sm font-bold ${gradeColorClass}`}>
+                            {item.name}({grade})
                             {(() => {
                               const lvl = (player.armorEnhanceLevels || {})[item.id] || 0;
                               return lvl > 0 ? ` [${lvl}강]` : '';
@@ -252,10 +259,13 @@ const ShopScreen = ({ player, shopLists, onExitShop, onBuyItem, onBuyPet, onEqui
                     const equipped = player.pet?.id === pet.id;
                     const price = (pet as any).price as number;
                     const canAfford = player.money >= price;
+                    const grade = getItemGrade(price);
+                    const gradeColorClass = getGradeColorClass(grade);
+                    const gradeBorderClass = getGradeBorderClass(grade);
                     return (
-                      <div key={pet.id} className="flex flex-col justify-between rounded border border-gray-300 p-3">
+                      <div key={pet.id} className={`flex flex-col justify-between rounded border-2 ${gradeBorderClass} p-3`}>
                         <div> 
-                          <div className="text-sm font-bold">{pet.icon} {pet.name}
+                          <div className={`text-sm font-bold ${gradeColorClass}`}>{pet.icon} {pet.name}({grade})
                             {(() => {
                               const lvl = (player.petEnhanceLevels || {})[pet.id] || 0;
                               return lvl > 0 ? ` [${lvl}강]` : '';

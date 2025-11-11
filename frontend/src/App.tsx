@@ -104,6 +104,7 @@ function App() {
             onLoadFromFile={actions.loadGameStateFromFile}
             onLoadFromText={actions.loadGameStateFromText}
             getSaveSlotInfo={actions.getSaveSlotInfo}
+            onResetAllBossCooldowns={actions.resetAllBossCooldowns}
           />
         )}
       </>
@@ -262,6 +263,7 @@ function App() {
           onLoadFromFile={actions.loadGameStateFromFile}
           onLoadFromText={actions.loadGameStateFromText}
           getSaveSlotInfo={actions.getSaveSlotInfo}
+          onResetAllBossCooldowns={actions.resetAllBossCooldowns}
         />
       )}
 

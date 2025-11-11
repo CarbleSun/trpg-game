@@ -321,6 +321,15 @@ export const useGameEngine = () => {
   };
 
   /**
+   * 모든 보스 타이머 초기화
+   */
+  const resetAllBossCooldowns = () => {
+    setBossCooldowns({});
+    localStorage.setItem('bossCooldowns', JSON.stringify({}));
+    addLog('⏰ 모든 보스 타이머가 초기화되었습니다.', 'normal');
+  };
+
+  /**
    * 로그 추가 유틸리티
    */
   const addLog = (msg: string, type: LogType = 'normal') => {
@@ -1600,6 +1609,7 @@ export const useGameEngine = () => {
       deleteGameSlot,
       loadGameStateFromFile,
       loadGameStateFromText,
+      resetAllBossCooldowns,
     },
   };
 };
