@@ -1,4 +1,12 @@
-import type { MonsterList, Skill, Dungeon, Pet, BossDungeon, BossStats, SkillKey } from "./types";
+import type {
+  MonsterList,
+  Skill,
+  Dungeon,
+  Pet,
+  BossDungeon,
+  BossStats,
+  SkillKey,
+} from "./types";
 
 // 밸런스 컨트롤러
 export const ctrl = {
@@ -530,12 +538,12 @@ export const createBoss = (bossLevel: number): BossStats => {
 
   // 보스가 사용할 수 있는 스킬 (레벨에 따라 다름)
   // 실제 skills 배열에 존재하는 스킬만 필터링하여 추가
-  const availableSkillKeys = new Set(skills.map(s => s.key));
+  const availableSkillKeys = new Set(skills.map((s) => s.key));
   const bossSkills: SkillKey[] = [];
-  
+
   if (bossLevel >= 5) {
     const level5Skills: SkillKey[] = ["hex", "ironWill", "shadowVeil"];
-    level5Skills.forEach(skillKey => {
+    level5Skills.forEach((skillKey) => {
       if (availableSkillKeys.has(skillKey)) {
         bossSkills.push(skillKey);
       }
@@ -543,7 +551,7 @@ export const createBoss = (bossLevel: number): BossStats => {
   }
   if (bossLevel >= 10) {
     const level10Skills: SkillKey[] = ["battleCryWar", "cleave", "bladeFlurry"];
-    level10Skills.forEach(skillKey => {
+    level10Skills.forEach((skillKey) => {
       if (availableSkillKeys.has(skillKey)) {
         bossSkills.push(skillKey);
       }
@@ -551,15 +559,19 @@ export const createBoss = (bossLevel: number): BossStats => {
   }
   if (bossLevel >= 15) {
     const level15Skills: SkillKey[] = ["warSmash", "crushingRoar", "flurry"];
-    level15Skills.forEach(skillKey => {
+    level15Skills.forEach((skillKey) => {
       if (availableSkillKeys.has(skillKey)) {
         bossSkills.push(skillKey);
       }
     });
   }
   if (bossLevel >= 20) {
-    const level20Skills: SkillKey[] = ["berserkRush", "vampiricAura", "THEWORLD"];
-    level20Skills.forEach(skillKey => {
+    const level20Skills: SkillKey[] = [
+      "berserkRush",
+      "vampiricAura",
+      "THEWORLD",
+    ];
+    level20Skills.forEach((skillKey) => {
       if (availableSkillKeys.has(skillKey)) {
         bossSkills.push(skillKey);
       }
