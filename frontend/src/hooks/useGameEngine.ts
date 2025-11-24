@@ -50,6 +50,7 @@ export const useGameEngine = () => {
   const [consecutiveMisses, setConsecutiveMisses] = useState(0); // 연속 빗나감 횟수
   const [recoveryCharges, setRecoveryCharges] = useState(5); // 회복 횟수 추가
   const [isSkillsOpen, setIsSkillsOpen] = useState(false); // 스킬 창 모달
+	const [isBattleSkillOpen, setIsBattleSkillOpen] = useState(false); // 전투 중 스킬 메뉴 상태
   const [currentDungeonId, setCurrentDungeonId] = useState<string | null>(null); // 현재 던전 ID
   const [currentBossDungeonId, setCurrentBossDungeonId] = useState<
     string | null
@@ -1980,6 +1981,11 @@ export const useGameEngine = () => {
     setIsProcessing(false);
   };
 
+	// 전투 스킬 메뉴 토글 함수
+	const handleToggleBattleSkills = () => {
+    setIsBattleSkillOpen(prev => !prev);
+  };
+
   const getPetEnhanceCost = (level: number) => 100 + level * 100;
   const handleEnhancePet = () => {
     if (!player || !player.pet) {
@@ -2157,16 +2163,40 @@ export const useGameEngine = () => {
         if (key === "c") handleContinueBattle();
         if (key === "x") handleExitDungeon();
       } else if (isPlayerTurn) {
-        // 전투 중 (A, D, E, Q)
-        if (key === "a") handleAttack();
-        if (key === "d") handleDefend();
-        if (key === "e") handleRecovery();
-        if (key === "q") {
-          if (isScarecrowBattle) {
-            handleExitScarecrowBattle();
-          } else {
-            handleEscape();
+        // 3-1. 스킬 메뉴가 열려있을 때 (숫자키 입력)
+        if (isBattleSkillOpen) {
+          const num = parseInt(key);
+          // 숫자 1~9 키 입력 확인
+          if (!isNaN(num) && num >= 1 && num <= 9) {
+            const skillIndex = num - 1;
+            // 현재 플레이어가 배운 스킬 목록
+            const playerSkills = player?.skills || [];
+            if (skillIndex < playerSkills.length) {
+              // 해당 슬롯의 스킬 사용
+              handleUseSkill(playerSkills[skillIndex]);
+              // 스킬 사용 후 메뉴 닫기
+              setIsBattleSkillOpen(false); 
+            }
           }
+          // 메뉴 닫기 (K, Q, ESC)
+          if (key === 'k' || key === 'q' || key === 'escape') {
+            setIsBattleSkillOpen(false);
+          }
+        } 
+        // 3-2. 스킬 메뉴가 닫혀있을 때 (기본 단축키)
+        else {
+          if (key === "a") handleAttack();
+          if (key === "d") handleDefend();
+          if (key === "e") handleRecovery();
+          if (key === "q") {
+            if (isScarecrowBattle) {
+              handleExitScarecrowBattle();
+            } else {
+              handleEscape();
+            }
+          }
+          // 스킬 메뉴 열기 (K)
+          if (key === "k") handleToggleBattleSkills();
         }
       }
     } else if (gameState === "shop") {
@@ -2207,6 +2237,7 @@ export const useGameEngine = () => {
     bossReward,
     isDeveloperMode,
     isScarecrowBattle,
+		isBattleSkillOpen,
     actions: {
       gameStart,
       handleSelectDungeon,
@@ -2257,6 +2288,7 @@ export const useGameEngine = () => {
       loadGameStateFromFile,
       loadGameStateFromText,
       resetAllBossCooldowns,
+			handleToggleBattleSkills,
     },
   };
 };

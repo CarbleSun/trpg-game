@@ -35,6 +35,7 @@ function App() {
 		bossReward,
     isDeveloperMode,
     isScarecrowBattle,
+		isBattleSkillOpen,
     actions,
   } = useGameEngine();
 
@@ -192,6 +193,8 @@ function App() {
           onExitDungeon={actions.handleExitDungeon}
           isScarecrowBattle={isScarecrowBattle}
           onExitScarecrowBattle={actions.handleExitScarecrowBattle}
+					isBattleSkillOpen={isBattleSkillOpen}
+          onToggleBattleSkills={actions.handleToggleBattleSkills}
         />
         
         {/* 씬 (VS) */}
