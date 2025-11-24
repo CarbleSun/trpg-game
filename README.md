@@ -102,6 +102,7 @@
 - 사용 언어 : TypeScript
 
 ## 🖥 실행 방법
+- cd frontend
 - npm run dev
 
 ## ⌨ 게임 방법
@@ -111,8 +112,10 @@
 ## 🖥 게임 화면
 <img width="1919" height="944" alt="Image" src="https://github.com/user-attachments/assets/bd9d86b2-2ab6-4fd6-83d3-6c5acfcce8ea" />
 
+<img width="1197" height="849" alt="Image" src="https://github.com/user-attachments/assets/b6e42614-08af-438c-8abb-9ec2300c5f22" />
 
-<img width="1919" height="945" alt="Image" src="https://github.com/user-attachments/assets/74e46f99-3f22-4e27-b007-01e1e3476051" />
+<img width="1123" height="925" alt="Image" src="https://github.com/user-attachments/assets/d1c682ee-e3fe-4d4e-a5ae-33fa65454c1f" />
 
+<img width="1134" height="876" alt="Image" src="https://github.com/user-attachments/assets/29f8d7fe-a7d9-41a4-a774-3821fab2beae" />
 
-<img width="1919" height="944" alt="Image" src="https://github.com/user-attachments/assets/208680ee-098f-4abc-ae01-f4d9eb07c05a" />
+<img width="1133" height="594" alt="Image" src="https://github.com/user-attachments/assets/76e51db7-f5a2-4e21-9294-b544bfb2f738" />
