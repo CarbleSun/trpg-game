@@ -1,7 +1,8 @@
 // src/game/engineConstants.ts
 
 import type { EquipmentItem } from './types';
-import { weaponShopList, armorShopList } from '../game/shopItems';
+import { weaponShopList, armorShopList, bossExclusiveWeapons, 
+  bossExclusiveArmors } from '../game/shopItems';
 
 /**
  * 각 직업별 기본 스탯 편차 (배율)
@@ -34,4 +35,4 @@ const bossRewardWeaponPool = weaponShopList.filter(item => TIER_3_PLUS_WEAPON_ID
 const bossRewardArmorPool = armorShopList.filter(item => TIER_3_PLUS_ARMOR_IDS.includes(item.id));
 
 // 전체 보상 풀
-export const bossRewardPool = [...bossRewardWeaponPool, ...bossRewardArmorPool];
+export const bossRewardPool = [...bossRewardWeaponPool, ...bossRewardArmorPool, ...bossExclusiveWeapons, ...bossExclusiveArmors];

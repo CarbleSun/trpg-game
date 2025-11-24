@@ -48,3 +48,18 @@ export const armorShopList: EquipmentItem[] = [
   // 4티어 장비
   { id: 'a11', name: '신성한 수호 갑옷', type: 'armor', value: 120, price: 5500, allowedJobs: JOBALL },
 ];
+
+// 보스 전용 드롭 아이템 추가
+export const bossExclusiveWeapons: EquipmentItem[] = [
+  { id: 'bw_1', name: '마왕의 검: 라그나로크', type: 'weapon', value: 180, price: 15000, allowedJobs: WARRIOR },
+  { id: 'bw_2', name: '고대 용의 지팡이', type: 'weapon', value: 195, price: 16000, allowedJobs: MAGE },
+  { id: 'bw_3', name: '영혼을 베는 낫', type: 'weapon', value: 185, price: 15500, allowedJobs: ROGUE },
+  { id: 'bw_4', name: '[신화] 창조의 검', type: 'weapon', value: 250, price: 50000, allowedJobs: JOBALL }, // 초레어
+];
+
+export const bossExclusiveArmors: EquipmentItem[] = [
+  { id: 'ba_1', name: '드래곤 스케일 메일', type: 'armor', value: 150, price: 14000, allowedJobs: WARRIOR },
+  { id: 'ba_2', name: '대현자의 로브', type: 'armor', value: 130, price: 14500, allowedJobs: MAGE },
+  { id: 'ba_3', name: '그림자 군주의 망토', type: 'armor', value: 140, price: 14200, allowedJobs: ROGUE },
+  { id: 'ba_4', name: '[신화] 불멸의 갑옷', type: 'armor', value: 220, price: 45000, allowedJobs: JOBALL }, // 초레어
+];
