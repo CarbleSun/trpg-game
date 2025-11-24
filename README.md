@@ -102,12 +102,12 @@
 - 사용 언어 : TypeScript
 
 ## 🖥 실행 방법
-1️⃣ node.js와 Visual Studio Code가 설치되어 있지 않다면 반드시 설치해주시기 바랍니다!
-2️⃣ 1번을 완료 했다면 code 버튼을 눌러 zip 파일을 다운로드 해주세요
-3️⃣ 다운로드가 완료 되었다면 파일 압축을 풀고 Visual Studio Code로 해당 파일을 열어주세요
-4️⃣ 터미널을 열고 cd frontend를 입력한 후 npm install을 입력, 실행해주세요
-5️⃣ 다운로드가 끝나면 npm run dev를 입력 후 localhost로 시작하는 특정 링크가 터미널에 나온다면 성공입니다. 
-6️⃣ 해당 링크를 ctrl버튼을 누른채로 마우스 좌클릭하여 들어가면 게임을 즐기실 수 있습니다!
+1️⃣ node.js와 Visual Studio Code가 설치되어 있지 않다면 반드시 설치해주시기 바랍니다! <br>
+2️⃣ 1번을 완료 했다면 code 버튼을 눌러 zip 파일을 다운로드 해주세요 <br>
+3️⃣ 다운로드가 완료 되었다면 파일 압축을 풀고 Visual Studio Code로 해당 파일을 열어주세요 <br>
+4️⃣ 터미널을 열고 cd frontend를 입력한 후 npm install을 입력, 실행해주세요 <br>
+5️⃣ 다운로드가 끝나면 npm run dev를 입력 후 localhost로 시작하는 특정 링크가 터미널에 나온다면 성공입니다. <br>
+6️⃣ 해당 링크를 ctrl버튼을 누른채로 마우스 좌클릭하여 들어가면 게임을 즐기실 수 있습니다! <br>
 
 
 ## ⌨ 게임 방법
