@@ -7,9 +7,12 @@ import { monsterList } from '../game/constants';
 /**
  * 레벨에 맞는 몬스터를 생성합니다.
  */
-export const makeMonster = (playerLevel: number, monsterLevelOffset: number = 0): CharacterStats => {
-  const baseTier = Math.floor((playerLevel - 1) / 10);
-  let monsterTier = baseTier + monsterLevelOffset;
+export const makeMonster = (monsterLevelOffset: number = 0): CharacterStats => {
+  // 던전 고정 난이도
+	// monsterLevelOffset 자체를 해당 던전의 등장 몬스터 티어(0~5)로 사용
+	let monsterTier = monsterLevelOffset;
+
+	// 범위 제한 (존재하지 않는 티어 방지)
   if (monsterTier < 0) monsterTier = 0;
   const maxTier = Object.keys(monsterList).length - 1;
   if (monsterTier > maxTier) monsterTier = maxTier;

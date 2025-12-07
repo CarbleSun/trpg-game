@@ -29,7 +29,7 @@ const DungeonSelectionScreen = ({
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         {/* 내부 클릭 시 닫기 방지 */}
         <div 
-          className="relative w-full max-w-4xl rounded-lg bg-white p-8 shadow-xl font-stat max-h-[90vh] overflow-y-auto"
+          className="relative w-full max-w-4xl rounded-lg bg-white p-8 shadow-xl font-stat max-h-[95vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
         <h2 className="text-3xl font-bold mb-4 text-center">던전 선택</h2>
@@ -46,7 +46,7 @@ const DungeonSelectionScreen = ({
                 onClick={() => canEnter && onSelectDungeon(dungeon.id)}
                 disabled={!canEnter}
                 className={`
-                  relative p-6 rounded-lg border-2 transition-all duration-200
+                  relative p-3 rounded-lg border-2 transition-all duration-200
                   ${canEnter
                     ? 'border-blue-500 hover:border-blue-700 hover:bg-blue-50 cursor-pointer'
                     : 'border-gray-300 bg-gray-100 cursor-not-allowed opacity-60'

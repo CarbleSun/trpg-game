@@ -1360,10 +1360,8 @@ export const useGameEngine = () => {
     setTimeout(() => {
       let newMonster: CharacterStats;
       if (shouldSpawnNamedMonster) {
-        const baseMonster = makeMonster(
-          player.level,
-          dungeon.monsterLevelOffset
-        ); // 순수 로직
+        const baseMonster = makeMonster(dungeon.monsterLevelOffset); // 순수 로직
+
         newMonster = {
           ...baseMonster,
           name: `[네임드] ${baseMonster.name}`,
@@ -1374,7 +1372,7 @@ export const useGameEngine = () => {
         };
         addLog(`✨ [${newMonster.name}] (이)가 나타났다!`, "appear");
       } else {
-        newMonster = makeMonster(player.level, dungeon.monsterLevelOffset); // 순수 로직
+        newMonster = makeMonster(dungeon.monsterLevelOffset); // 순수 로직
         addLog(`👻 ${newMonster.name} (이)가 나타났다!`, "appear");
       }
       setMonster(newMonster);
