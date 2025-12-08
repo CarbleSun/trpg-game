@@ -10,7 +10,7 @@ interface NormalDropModalProps {
 }
 
 const NormalDropModal: React.FC<NormalDropModalProps> = ({ player, reward, onAction }) => {
-  const { item, isDuplicate, isUsable, sellPrice } = reward;
+  const { item, isDuplicate, sellPrice } = reward;
 
   // 현재 장착된 아이템 정보 (비교용)
   const currentEquippedItem = item.type === 'weapon' ? player.weapon : player.armor;
@@ -27,10 +27,18 @@ const NormalDropModal: React.FC<NormalDropModalProps> = ({ player, reward, onAct
   const currentEquippedValue = getCurrentValue(currentEquippedItem, item.type);
   const newValue = item.value;
 
-  const isEquipDisabled = !isUsable;
+	// 장착 불가 사유 판별 로직
+  const jobCanUse = !item.allowedJobs || item.allowedJobs.includes(player.job);
+  const levelCanUse = !item.requiredLevel || player.level >= item.requiredLevel;
+	const isEquipped = currentEquippedItem?.id === item.id;
+
+  const isEquipDisabled = !jobCanUse || !levelCanUse || isEquipped;
+
   let equipButtonText = '장착하기';
-  if (!isUsable) {
+  if (!jobCanUse) {
     equipButtonText = '장착 불가 (직업 제한)';
+  } else if (!levelCanUse) {
+    equipButtonText = `장착 불가 (필요 Lv.${item.requiredLevel})`;
   } else if (currentEquippedItem?.id === item.id) {
     equipButtonText = '이미 장착중';
   }
@@ -56,6 +64,15 @@ const NormalDropModal: React.FC<NormalDropModalProps> = ({ player, reward, onAct
             <p className="text-lg font-bold text-blue-600">{item.name}</p>
             <p className="text-sm text-gray-600 mt-1">
               {item.type === 'weapon' ? 'ATK' : 'DEF'} +{item.value} 
+
+							{/* 레벨 제한 표시 */}
+              {item.requiredLevel && (
+                <span className={`ml-2 text-xs font-bold ${levelCanUse ? 'text-blue-600' : 'text-red-500'}`}>
+                  Lv.{item.requiredLevel}
+                </span>
+              )}
+
+							{/* 직업 제한 표시 */}
               {item.allowedJobs && item.allowedJobs.length > 0 && 
                 <span className="ml-2 text-gray-500 text-xs">
                   { (item.allowedJobs.includes('전사') && item.allowedJobs.includes('마법사') && item.allowedJobs.includes('도적'))

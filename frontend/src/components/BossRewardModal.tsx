@@ -10,7 +10,7 @@ interface BossRewardModalProps {
 }
 
 const BossRewardModal: React.FC<BossRewardModalProps> = ({ player, reward, onAction }) => {
-  const { item, isDuplicate, isUsable, sellPrice } = reward;
+  const { item, isDuplicate, sellPrice } = reward;
 
   // 특수 장비(보스 전용) 판별 로직
   // id가 'bw_'(Boss Weapon) 또는 'ba_'(Boss Armor)로 시작하는지 확인
@@ -31,11 +31,18 @@ const BossRewardModal: React.FC<BossRewardModalProps> = ({ player, reward, onAct
   const currentEquippedValue = getCurrentValue(currentEquippedItem, item.type);
   const newValue = item.value; // 새 아이템은 강화 레벨 0
 
-  // 장착 버튼 비활성화 조건
-  const isEquipDisabled = !isUsable;
-  let equipButtonText = '장착하기';
-  if (!isUsable) {
+	// 장착 불가 사유 판별 로직 추가
+  const jobCanUse = !item.allowedJobs || item.allowedJobs.includes(player.job);
+  const levelCanUse = !item.requiredLevel || player.level >= item.requiredLevel;
+	const isEquipped = currentEquippedItem?.id === item.id;
+
+  const isEquipDisabled = !jobCanUse || !levelCanUse || isEquipped;
+  
+	let equipButtonText = '장착하기';
+  if (!jobCanUse) {
     equipButtonText = '장착 불가 (직업 제한)';
+  } else if (!levelCanUse) {
+    equipButtonText = `장착 불가 (필요 Lv.${item.requiredLevel})`;
   } else if (currentEquippedItem?.id === item.id) {
     equipButtonText = '이미 장착중';
   }
@@ -65,7 +72,14 @@ const BossRewardModal: React.FC<BossRewardModalProps> = ({ player, reward, onAct
             {isSpecial && <p className="text-xs font-bold text-purple-500 mt-1">✨ 강력한 기운이 느껴집니다 ✨</p>}
 
             <div className="mt-2 text-sm text-gray-600">
-              {item.type === 'weapon' ? 'ATK' : 'DEF'} +{item.value} 
+              {item.type === 'weapon' ? 'ATK' : 'DEF'} +{item.value}
+
+							{/* 레벨 제한 표시 */}
+              {item.requiredLevel && (
+                <span className={`ml-2 font-bold ${levelCanUse ? 'text-blue-600' : 'text-red-500'}`}>
+                  Lv.{item.requiredLevel}
+                </span>
+              )}
               
               {/* 직업 제한 표시 */}
               {item.allowedJobs && item.allowedJobs.length > 0 && 

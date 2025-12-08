@@ -22,7 +22,8 @@ export interface EquipmentItem {
   type: "weapon" | "armor";
   value: number; // (공격력 또는 방어력)
   price: number;
-  allowedJobs?: Job[]; // <-- JOB 제한
+  allowedJobs?: Job[]; // 직업 제한
+	requiredLevel?: number; // 착용 제한 레벨 추가
 }
 
 // 펫 타입

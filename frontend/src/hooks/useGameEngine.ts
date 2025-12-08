@@ -1086,10 +1086,13 @@ export const useGameEngine = () => {
             ? playerAfterBattle.ownedWeaponIds || []
             : playerAfterBattle.ownedArmorIds || [];
         const isDuplicate = ownedList.includes(rewardItem.id);
+
+				// 직업 제한, 레벨 제한 로직
         const isUsable =
-          !rewardItem.allowedJobs ||
-          rewardItem.allowedJobs.includes(playerAfterBattle.job);
-        const sellPrice = Math.floor(rewardItem.price * 0.5); // 정가 50%
+          (!rewardItem.allowedJobs || rewardItem.allowedJobs.includes(playerAfterBattle.job)) &&
+          (!rewardItem.requiredLevel || playerAfterBattle.level >= rewardItem.requiredLevel);
+
+        const sellPrice = Math.floor(rewardItem.price * 0.5); // 판매 시 정가 50%
 
         setBossReward({ item: rewardItem, isDuplicate, isUsable, sellPrice });
         setGameState("bossReward"); // 모달 상태로 전환
@@ -1224,7 +1227,11 @@ export const useGameEngine = () => {
             ? playerAfterBattle.ownedWeaponIds || []
             : playerAfterBattle.ownedArmorIds || [];
         const isDuplicate = ownedList.includes(rewardItem.id);
-        const isUsable = !rewardItem.allowedJobs || rewardItem.allowedJobs.includes(playerAfterBattle.job);
+
+        const isUsable = 
+					(!rewardItem.allowedJobs || rewardItem.allowedJobs.includes(playerAfterBattle.job)) &&
+          (!rewardItem.requiredLevel || playerAfterBattle.level >= rewardItem.requiredLevel);
+
         const sellPrice = Math.floor(rewardItem.price * 0.5);
 
         // 데이터는 bossReward 상태를 재사용하지만,
@@ -1852,6 +1859,13 @@ export const useGameEngine = () => {
       addLog(`💰 골드가 부족합니다. (필요: ${item.price} G)`, "fail");
       return;
     }
+
+		// 레벨 제한 확인
+    if (item.requiredLevel && player.level < item.requiredLevel) {
+      addLog(`🚫 레벨이 부족하여 구매할 수 없습니다. (필요 Lv.${item.requiredLevel})`, 'fail');
+      return;
+    }
+
     const jobCanUse =
       !item.allowedJobs || item.allowedJobs.includes(player.job);
     if (!jobCanUse) {
@@ -1890,7 +1904,15 @@ export const useGameEngine = () => {
     const item =
       weaponShopList.find((w) => w.id === id) ||
       (id === STARTER_CLUB.id ? STARTER_CLUB : null);
+
     if (!item) return;
+
+		// 레벨 제한 확인
+    if (item.requiredLevel && player.level < item.requiredLevel) {
+      addLog(`🚫 레벨이 부족하여 장착할 수 없습니다. (필요 Lv.${item.requiredLevel})`, 'fail');
+      return;
+    }
+
     const jobCanUse =
       !item.allowedJobs || item.allowedJobs.includes(player.job);
     if (!jobCanUse) {
@@ -1904,7 +1926,15 @@ export const useGameEngine = () => {
   const handleEquipArmor = (id: string) => {
     if (!player) return;
     const item = armorShopList.find((a) => a.id === id);
+
     if (!item) return;
+
+		// 레벨 제한 확인
+    if (item.requiredLevel && player.level < item.requiredLevel) {
+      addLog(`🚫 레벨이 부족하여 장착할 수 없습니다. (필요 Lv.${item.requiredLevel})`, 'fail');
+      return;
+    }
+
     const jobCanUse =
       !item.allowedJobs || item.allowedJobs.includes(player.job);
     if (!jobCanUse) {
