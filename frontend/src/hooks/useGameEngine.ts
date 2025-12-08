@@ -23,7 +23,7 @@ import {
   createBoss,
 } from "../game/constants";
 import { weaponShopList, armorShopList } from "../game/shopItems";
-import { STARTER_CLUB, bossRewardPool } from "../game/engineConstants";
+import { STARTER_CLUB, bossRewardPool, normalDropPool } from "../game/engineConstants";
 // 유틸리티 임포트
 import { getRandom } from "../game/utils";
 // 분리된 로직 임포트
@@ -1204,12 +1204,42 @@ export const useGameEngine = () => {
     let playerAfterBattle = { ...updatedPlayer };
     const logs: Omit<LogMessage, "id">[] = [];
 
+		let didDropItem = false;
+
     if (type === "victory" && targetMonster) {
       logs.push({
         msg: `🎉 전투에서 승리했다! ${targetMonster.name}을(를) 물리쳤다.`,
         type: "vic",
       });
       playerAfterBattle.vicCount += 1;
+
+			// 일반 몬스터 아이템 드롭
+			const DROP_CHANCE = 5; 
+      
+      if (getRandom(1, 100) <= DROP_CHANCE && normalDropPool.length > 0) {
+        didDropItem = true;
+        const rewardItem = normalDropPool[getRandom(0, normalDropPool.length - 1)];
+
+        const ownedList = rewardItem.type === "weapon"
+            ? playerAfterBattle.ownedWeaponIds || []
+            : playerAfterBattle.ownedArmorIds || [];
+        const isDuplicate = ownedList.includes(rewardItem.id);
+        const isUsable = !rewardItem.allowedJobs || rewardItem.allowedJobs.includes(playerAfterBattle.job);
+        const sellPrice = Math.floor(rewardItem.price * 0.5);
+
+        // 데이터는 bossReward 상태를 재사용하지만,
+        setBossReward({ item: rewardItem, isDuplicate, isUsable, sellPrice });
+        
+        // 🚨 상태는 'normalDrop'으로 설정하여 다른 모달을 띄웁니다!
+        setGameState("normalDrop"); 
+        
+        setShowBattleChoice(false);
+        
+        logs.push({
+          msg: `🎁 몬스터가 [${rewardItem.name}]을(를) 떨어뜨렸습니다!`,
+          type: "lvup",
+        });
+      }
 
       // 처치 횟수 갱신
       if (currentDungeonId) {

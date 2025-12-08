@@ -12,6 +12,7 @@ import SkillsScreen from './components/SkillsScreen';
 import DungeonSelectionScreen from './components/DungeonSelectionScreen';
 import BossSelectionScreen from './components/BossSelectionScreen';
 import BossRewardModal from './components/BossRewardModal';
+import NormalDropModal from './components/NormalDropModal';
 import DeveloperPanel from './components/DeveloperPanel';
 import ScarecrowScreen from './components/ScarecrowScreen';
 import { useGameEngine } from './hooks/useGameEngine';
@@ -259,6 +260,15 @@ function App() {
           player={player}
           reward={bossReward}
           onAction={actions.handleBossRewardAction}
+        />
+      )}
+
+			{/* 2. 일반 드롭 모달 렌더링 */}
+      {gameState === 'normalDrop' && bossReward && (
+        <NormalDropModal
+          player={player}
+          reward={bossReward} // 데이터는 bossReward state를 공유
+          onAction={actions.handleBossRewardAction} // 액션 핸들러도 재사용 (장착/판매 로직 동일)
         />
       )}
 

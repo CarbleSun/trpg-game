@@ -176,7 +176,8 @@ export type GameState =
   | "petEnhance"
   | "weaponEnhance"
   | "bossReward" // 보스 보상 처리 모달 상태
-  | "scarecrow"; // 허수아비 메뉴
+  | "scarecrow" // 허수아비 메뉴
+	| "normalDrop"; // 일반 몬스터 드롭 모달
 
 // 보스 보상 모달
 export interface BossReward {
