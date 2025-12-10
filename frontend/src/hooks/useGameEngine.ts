@@ -1971,7 +1971,7 @@ export const useGameEngine = () => {
     addLog(`🐾 펫을 해제했습니다.`, "normal");
   };
 
-  const handleOpenPetEnhance = () => setGameState("petEnhance");
+  const handleOpenPetEnhance = () => setGameState("weaponEnhance");
   const handleOpenWeaponEnhance = () => setGameState("weaponEnhance");
   const handleCloseEnhance = () => setGameState("dungeon");
   const handleOpenScarecrow = () => {
@@ -2211,8 +2211,8 @@ export const useGameEngine = () => {
         if (key === "r") handleDungeonRecovery(); // 휴식
         if (key === "h") handleEnterShop(); // 상점 (h)
         if (key === "k") handleOpenSkills(); // 스킬
-        if (key === "p") handleOpenPetEnhance(); // 펫 강화
-        if (key === "w") handleOpenWeaponEnhance(); // 무기 강화
+        if (key === "p") handleOpenPetEnhance(); // 펫 강화 (강화소로 통합)
+        if (key === "w") handleOpenWeaponEnhance(); // 강화소
         if (key === "t") handleOpenScarecrow(); // 허수아비 (Training dummy)
       }
     } else if (gameState === "battle") {

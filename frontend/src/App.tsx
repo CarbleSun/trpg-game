@@ -1,21 +1,20 @@
-import { useEffect } from 'react';
-import Header from './components/Header';
-import SetupScreen from './components/SetupScreen';
-import StatusDisplay from './components/StatusDisplay';
-import ActionMenu from './components/ActionMenu';
-import Scene from './components/Scene';
-import GameLog from './components/GameLog';
-import ShopScreen from './components/ShopScreen';
-import PetEnhanceScreen from './components/PetEnhanceScreen';
-import WeaponEnhanceScreen from './components/WeaponEnhanceScreen';
-import SkillsScreen from './components/SkillsScreen';
-import DungeonSelectionScreen from './components/DungeonSelectionScreen';
-import BossSelectionScreen from './components/BossSelectionScreen';
-import BossRewardModal from './components/BossRewardModal';
-import NormalDropModal from './components/NormalDropModal';
-import DeveloperPanel from './components/DeveloperPanel';
-import ScarecrowScreen from './components/ScarecrowScreen';
-import { useGameEngine } from './hooks/useGameEngine';
+import { useEffect } from "react";
+import Header from "./components/Header";
+import SetupScreen from "./components/SetupScreen";
+import StatusDisplay from "./components/StatusDisplay";
+import ActionMenu from "./components/ActionMenu";
+import Scene from "./components/Scene";
+import GameLog from "./components/GameLog";
+import ShopScreen from "./components/ShopScreen";
+import EquipmentEnhanceScreen from "./components/WeaponEnhanceScreen";
+import SkillsScreen from "./components/SkillsScreen";
+import DungeonSelectionScreen from "./components/DungeonSelectionScreen";
+import BossSelectionScreen from "./components/BossSelectionScreen";
+import BossRewardModal from "./components/BossRewardModal";
+import NormalDropModal from "./components/NormalDropModal";
+import DeveloperPanel from "./components/DeveloperPanel";
+import ScarecrowScreen from "./components/ScarecrowScreen";
+import { useGameEngine } from "./hooks/useGameEngine";
 
 function App() {
   const {
@@ -25,18 +24,18 @@ function App() {
     gameState,
     isPlayerTurn,
     isProcessing,
-		recoveryCharges, // 회복 횟수
-		shopLists, // 상점 목록
+    recoveryCharges, // 회복 횟수
+    shopLists, // 상점 목록
     skills,
     isSkillsOpen,
     showBattleChoice,
     dungeons,
     bossDungeons,
     bossCooldowns,
-		bossReward,
+    bossReward,
     isDeveloperMode,
     isScarecrowBattle,
-		isBattleSkillOpen,
+    isBattleSkillOpen,
     actions,
   } = useGameEngine();
 
@@ -45,10 +44,10 @@ function App() {
     const handleKeyDown = (event: KeyboardEvent) => {
       actions.handleKeyDown(event.key.toLowerCase());
     };
-    
-    window.addEventListener('keydown', handleKeyDown);
+
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, [actions]); // actions는 메모이제이션되어 있다고 가정 (useCallback 사용 시)
   // *참고: useGameEngine에서 actions 객체를 useCallback으로 감싸면 더 최적화할 수 있습니다.
@@ -61,41 +60,41 @@ function App() {
     window.enableDevMode = () => {
       actions.enableDeveloperMode();
     };
-    
+
     // 개발자 코드 입력 감지
-    let devCodeBuffer = '';
+    let devCodeBuffer = "";
     const handleKeyPress = (e: KeyboardEvent) => {
       // Ctrl+Shift+D로 개발자 모드 활성화
-      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+      if (e.ctrlKey && e.shiftKey && e.key === "D") {
         e.preventDefault();
         actions.enableDeveloperMode();
         return;
       }
-      
+
       // "mamat1234" 입력 시 개발자 모드 활성화
       if (e.key.length === 1) {
         devCodeBuffer += e.key.toLowerCase();
         if (devCodeBuffer.length > 15) {
           devCodeBuffer = devCodeBuffer.slice(-15);
         }
-        if (devCodeBuffer.includes('mamat1234')) {
+        if (devCodeBuffer.includes("mamat1234")) {
           actions.enableDeveloperMode();
-          devCodeBuffer = '';
+          devCodeBuffer = "";
         }
       }
     };
-    
-    window.addEventListener('keydown', handleKeyPress);
-    
+
+    window.addEventListener("keydown", handleKeyPress);
+
     return () => {
       // @ts-ignore
       delete window.enableDevMode;
-      window.removeEventListener('keydown', handleKeyPress);
+      window.removeEventListener("keydown", handleKeyPress);
     };
   }, [actions]);
 
   // 1. 설정 화면 (캐릭터 생성)
-  if (gameState === 'setup' || !player) {
+  if (gameState === "setup" || !player) {
     return (
       <>
         <SetupScreen onGameStart={actions.gameStart} />
@@ -116,7 +115,7 @@ function App() {
   }
 
   // 2. 던전 선택 화면
-  if (gameState === 'dungeonSelect') {
+  if (gameState === "dungeonSelect") {
     return (
       <div className="flex min-h-screen flex-col bg-gray-50">
         <Header />
@@ -135,7 +134,7 @@ function App() {
   }
 
   // 2-1. 보스 던전 선택 화면
-  if (gameState === 'bossSelect') {
+  if (gameState === "bossSelect") {
     return (
       <div className="flex min-h-screen flex-col bg-gray-50">
         <Header />
@@ -158,20 +157,20 @@ function App() {
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
       <Header />
-      
+
       {/* style.css의 .wrap */}
       <main className="mx-auto w-full max-w-5xl px-5 pb-10 md:px-8">
         {/* 스탯 표시 */}
         <StatusDisplay player={player} />
 
         {/* 학습은 별도 스킬 모달에서 진행 */}
-        
+
         {/* 액션 메뉴 */}
         <ActionMenu
           gameState={gameState}
           isPlayerTurn={isPlayerTurn}
           isProcessing={isProcessing}
-					recoveryCharges={recoveryCharges} // <-- 2. ActionMenu로 전달
+          recoveryCharges={recoveryCharges} // <-- 2. ActionMenu로 전달
           learnedSkills={player.skills}
           skillCooldowns={player.skillCooldowns}
           skills={skills}
@@ -181,8 +180,7 @@ function App() {
           onDefend={actions.handleDefend}
           onRecover={actions.handleRecovery}
           onEscape={actions.handleEscape}
-				  onEnterShop={actions.handleEnterShop}
-          onOpenPetEnhance={actions.handleOpenPetEnhance}
+          onEnterShop={actions.handleEnterShop}
           onOpenWeaponEnhance={actions.handleOpenWeaponEnhance}
           onOpenScarecrow={actions.handleOpenScarecrow}
           onOpenSkills={actions.handleOpenSkills}
@@ -194,23 +192,23 @@ function App() {
           onExitDungeon={actions.handleExitDungeon}
           isScarecrowBattle={isScarecrowBattle}
           onExitScarecrowBattle={actions.handleExitScarecrowBattle}
-					isBattleSkillOpen={isBattleSkillOpen}
+          isBattleSkillOpen={isBattleSkillOpen}
           onToggleBattleSkills={actions.handleToggleBattleSkills}
         />
-        
+
         {/* 씬 (VS) */}
         <Scene
           player={player}
           monster={monster}
-          isPlayerTurn={isPlayerTurn && gameState === 'battle'}
+          isPlayerTurn={isPlayerTurn && gameState === "battle"}
         />
-        
+
         {/* 게임 로그 */}
         <GameLog messages={logMessages} />
       </main>
 
-			{/* 상점 모달 조건부 렌더링 (화면 위에 겹침) */}
-      {gameState === 'shop' && (
+      {/* 상점 모달 조건부 렌더링 (화면 위에 겹침) */}
+      {gameState === "shop" && (
         <ShopScreen
           player={player}
           shopLists={shopLists}
@@ -226,21 +224,14 @@ function App() {
         />
       )}
 
-      {/* 펫 강화소 */}
-      {gameState === 'petEnhance' && (
-        <PetEnhanceScreen
+      {/* 강화소 (무기, 방어구, 펫) */}
+      {gameState === "weaponEnhance" && (
+        <EquipmentEnhanceScreen
           player={player}
           onClose={actions.handleCloseEnhance}
-          onEnhance={actions.handleEnhancePet}
-        />
-      )}
-
-      {/* 무기 강화소 */}
-      {gameState === 'weaponEnhance' && (
-        <WeaponEnhanceScreen
-          player={player}
-          onClose={actions.handleCloseEnhance}
-          onEnhance={actions.handleEnhanceWeapon}
+          onEnhanceWeapon={actions.handleEnhanceWeapon}
+          onEnhanceArmor={actions.handleEnhanceArmor}
+          onEnhancePet={actions.handleEnhancePet}
         />
       )}
 
@@ -254,8 +245,8 @@ function App() {
         />
       )}
 
-			{/* 보스 보상 모달 렌더링 */}
-      {gameState === 'bossReward' && bossReward && (
+      {/* 보스 보상 모달 렌더링 */}
+      {gameState === "bossReward" && bossReward && (
         <BossRewardModal
           player={player}
           reward={bossReward}
@@ -263,8 +254,8 @@ function App() {
         />
       )}
 
-			{/* 2. 일반 드롭 모달 렌더링 */}
-      {gameState === 'normalDrop' && bossReward && (
+      {/* 2. 일반 드롭 모달 렌더링 */}
+      {gameState === "normalDrop" && bossReward && (
         <NormalDropModal
           player={player}
           reward={bossReward} // 데이터는 bossReward state를 공유
@@ -273,7 +264,7 @@ function App() {
       )}
 
       {/* 허수아비 화면 */}
-      {gameState === 'scarecrow' && (
+      {gameState === "scarecrow" && (
         <ScarecrowScreen
           player={player}
           onClose={actions.handleCloseScarecrow}
@@ -293,7 +284,6 @@ function App() {
           onResetAllBossCooldowns={actions.resetAllBossCooldowns}
         />
       )}
-
     </div>
   );
 }
