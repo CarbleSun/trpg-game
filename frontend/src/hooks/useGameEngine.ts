@@ -842,17 +842,39 @@ export const useGameEngine = () => {
 
       if (availableSkills.length > 0 && getRandom(1, 100) <= SKILL_CHANCE) {
         // --- 스킬 사용 ---
-        const skillKey =
-          availableSkills[getRandom(0, availableSkills.length - 1)];
+        const skillKey = availableSkills[getRandom(0, availableSkills.length - 1)];
         const skill = allSkills.find((s) => s.key === skillKey);
         if (!skill) {
-          addLog(
-            `⚠️ 보스가 알 수 없는 스킬을 사용하려고 했습니다: ${skillKey}`,
-            "fail"
-          );
+					// 1. 보스 턴에서 버그가 일어나려 할 경우 '천벌'로 인한 자멸 발동
+          addLog(`⚡ 보스가 치트를 쓰려다가 천벌을 받았습니다!`, "cri");
+
+          // 2. 보스 체력 절반 감소 로직(천벌 발동)
+          const penalty = Math.floor(updatedBoss.hp / 2);
+          updatedBoss.hp = Math.max(1, updatedBoss.hp - penalty); // 최소 1은 남김 (죽이지는 않음)
+          addLog(`⚡ 천벌로 인해 보스의 체력이 절반 줄어듭니다! (-${penalty})`, "vic");
+          
+          setBoss(updatedBoss); // 감소된 체력 반영
+
+          // 3. 게임 멈춤 방지: 강제로 플레이어 턴으로 넘김
+          addLog(`--- 플레이어의 턴 ---`, "normal");
+          
+          // 플레이어 턴 시작 처리 (틱 데미지, 펫 효과 등)
+          const ticked = tickSkills(currentPlayer);
+          const {
+            player: playerAfterPet,
+            monster: monsterAfterPet,
+            logs: petLogs,
+          } = applyPetStartOfTurn(ticked, updatedBoss, getEffectivePlayerStats);
+          
+          addLogs(petLogs);
+          setPlayer(playerAfterPet);
+          setBoss(monsterAfterPet as BossStats);
+
+          setIsPlayerTurn(true);
           setIsProcessing(false);
           return;
         }
+
         usedSkillKey = skillKey;
         addLog(`👹 ${currentBoss.name}의 스킬! [${skill.name}]!`, "cri");
 
@@ -1296,7 +1318,11 @@ export const useGameEngine = () => {
 
     // 승리 시에만 계속/나가기 선택 표시, 패배/도망 시에는 던전으로 복귀
     if (type === "victory") {
-      setShowBattleChoice(true);
+			// 아이템이 드롭되지 않았을 때만 '계속 싸우기' 버튼을 보여줌.
+			if (!didDropItem) {
+				setShowBattleChoice(true);
+			}
+			// 아이템이 드롭되었다면 모달이 떠 있으므로 버튼을 숨김
     } else {
       setGameState("dungeon");
       setCurrentDungeonId(null);
