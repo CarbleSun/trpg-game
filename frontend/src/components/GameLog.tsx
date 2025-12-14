@@ -15,8 +15,8 @@ const getLogTypeClass = (type: LogType): string => {
     case 'lvup': return 'bg-yellow-100 p-1 rounded';
     case 'fail': return 'text-gray-500';
     case 'appear': return 'font-bold text-lg underline';
-    case 'gainExp': return 'text-yellow-600';
-    case 'gainMoney': return 'text-green-600';
+    case 'gainExp': return 'text-green-600';
+    case 'gainMoney': return 'text-yellow-600';
     case 'tryToAtk': return 'text-red-400';
     default: return 'text-gray-800';
   }
