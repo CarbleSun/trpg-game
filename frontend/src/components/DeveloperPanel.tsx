@@ -17,9 +17,16 @@ const DeveloperPanel = ({ onSave, onLoad, onDelete, onLoadFromFile, onLoadFromTe
   const [slotInfos, setSlotInfos] = useState<Array<{ exists: boolean; timestamp: number; playerName: string; playerLevel: number } | null>>([]);
   const [showLoadOptions, setShowLoadOptions] = useState(false);
   const [pasteText, setPasteText] = useState('');
+  
+  // 패널 표시 여부 상태 (기본값: true - 보임)
+  const [isVisible, setIsVisible] = useState(true);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // 패널이 숨겨져 있어도 데이터 갱신은 계속하거나, 
+    // 성능을 위해 isVisible일 때만 갱신하도록 설정할 수 있습니다.
+    // 여기서는 로직 단순화를 위해 항상 갱신합니다.
     const updateSlotInfos = async () => {
       const infos = [];
       for (let i = 1; i <= SLOT_COUNT; i++) {
@@ -30,7 +37,6 @@ const DeveloperPanel = ({ onSave, onLoad, onDelete, onLoadFromFile, onLoadFromTe
     };
 
     updateSlotInfos();
-    // 저장 시 업데이트를 위해 주기적으로 체크
     const interval = setInterval(updateSlotInfos, 1000);
     return () => clearInterval(interval);
   }, [getSaveSlotInfo]);
@@ -77,9 +83,33 @@ const DeveloperPanel = ({ onSave, onLoad, onDelete, onLoadFromFile, onLoadFromTe
     }
   };
 
+  // 1. 숨김 상태일 때 보여줄 UI (동그란 버튼)
+  if (!isVisible) {
+    return (
+      <button
+        onClick={() => setIsVisible(true)}
+        className="fixed bottom-4 right-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-gray-800 text-yellow-400 shadow-lg transition-transform hover:scale-110 hover:bg-gray-700"
+        title="개발자 모드 열기"
+      >
+        🔧
+      </button>
+    );
+  }
+
+  // 2. 펼침 상태일 때 보여줄 UI (기존 패널 + 숨기기 버튼)
   return (
     <div className="fixed bottom-4 right-4 z-50 w-96 rounded-lg bg-gray-800 p-4 shadow-lg max-h-[90vh] overflow-y-auto">
-      <div className="mb-3 text-sm font-bold text-yellow-400">🔧 개발자 모드</div>
+      {/* 헤더 영역 수정: 제목과 숨기기 버튼 배치 */}
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-sm font-bold text-yellow-400">🔧 개발자 모드</div>
+        <button
+          onClick={() => setIsVisible(false)}
+          className="rounded p-1 text-gray-400 hover:bg-gray-700 hover:text-white"
+          title="패널 숨기기"
+        >
+          ➖
+        </button>
+      </div>
       
       {/* 슬롯 선택 */}
       <div className="mb-3">
@@ -202,4 +232,3 @@ const DeveloperPanel = ({ onSave, onLoad, onDelete, onLoadFromFile, onLoadFromTe
 };
 
 export default DeveloperPanel;
-
