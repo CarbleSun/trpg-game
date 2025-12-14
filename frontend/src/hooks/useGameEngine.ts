@@ -2217,9 +2217,17 @@ export const useGameEngine = () => {
     addLogs(logs);
     setPlayer(updatedPlayer);
     setBossReward(null);
-    setShowBattleChoice(false);
-    setGameState("dungeon");
-    setCurrentBossDungeonId(null); // 보스 던전 ID 초기화하여 홈으로 복귀
+
+		if(currentBossDungeonId) {
+			// 보스 던전일 경우 : 전투 종료 후 홈으로 복귀
+			setShowBattleChoice(false);
+    	setGameState("dungeon");
+    	setCurrentBossDungeonId(null); // 보스 던전 ID 초기화하여 홈으로 복귀
+		} else {
+			// 일반 던전일 경우 : 다시 전투 화면(선택지)으로 복귀
+			setGameState("battle");
+			setShowBattleChoice(true);
+		}
   };
 
   const handleKeyDown = (key: string) => {
