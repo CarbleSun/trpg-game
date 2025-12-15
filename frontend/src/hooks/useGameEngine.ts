@@ -816,9 +816,9 @@ export const useGameEngine = () => {
       const availableSkillKeys = new Set(allSkills.map((s) => s.key));
 
       // 보스 스킬 배열을 정리하여 유효한 스킬만 남김
-      const validBossSkills = (updatedBoss.skills || []).filter((key) => {        
-        availableSkillKeys.has(key as SkillKey);
-      });
+      const validBossSkills = (updatedBoss.skills || []).filter((key) =>         
+        availableSkillKeys.has(key as SkillKey)
+      );
 
       const availableSkills = validBossSkills.filter(
         (key) => ((updatedBoss.skillCooldowns || {})[key] || 0) <= 0
