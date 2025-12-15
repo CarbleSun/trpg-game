@@ -91,8 +91,6 @@ const ActionMenu = ({
 }: ActionMenuProps) => {
   const isBattle = gameState === "battle";
   const canAct = !isProcessing && (isBattle ? isPlayerTurn : true);
-  const nameOf = (key: SkillKey) =>
-    skills.find((s) => s.key === key)?.name || key;
 
   return (
     <div className="relative flex h-14 justify-center my-10">
@@ -173,9 +171,9 @@ const ActionMenu = ({
             </>
           ) : (
             <>
-              {/* 스킬 목록 팝업 (스킬 메뉴가 열렸을 때만 표시) */}
+              {/* 스킬 목록 팝업 */}
               {isBattleSkillOpen && (
-                <div className="absolute bottom-full mb-4 flex flex-col gap-1 rounded-lg border border-gray-400 bg-white p-3 shadow-lg z-10 min-w-[200px]">
+                <div className="absolute bottom-full mb-4 flex flex-col gap-1 rounded-lg border border-gray-400 bg-white p-3 shadow-lg z-10 min-w-60">
                   <div className="mb-2 text-center font-bold text-gray-700 border-b pb-1">
                     스킬 목록
                   </div>
@@ -186,6 +184,7 @@ const ActionMenu = ({
                   ) : (
                     <div className="grid grid-cols-2 gap-2">
                       {learnedSkills.map((key, index) => {
+                        const skill = skills.find((s) => s.key === key);
                         const cd =
                           (
                             skillCooldowns as Record<
@@ -194,8 +193,12 @@ const ActionMenu = ({
                             >
                           )[key] || 0;
                         const disabled = !canAct || cd > 0;
-                        // 단축키 1~9
+                        
+                        // 필터링 없이 원래 인덱스를 그대로 사용하여 키 매핑을 일치시킴
                         const hotkey = index < 9 ? `${index + 1}` : "";
+
+                        // 스킬 데이터가 없으면 버튼을 그리지 않음 (단, 인덱스는 건너뛰어짐)
+                        if (!skill) return null;
 
                         return (
                           <button
@@ -205,22 +208,22 @@ const ActionMenu = ({
                               onToggleBattleSkills();
                             }}
                             disabled={disabled}
-                            className="relative flex items-center justify-between rounded border border-gray-300 px-3 py-2 text-left text-sm hover:bg-blue-50 disabled:opacity-50 disabled:hover:bg-white"
+                            className="relative flex items-center justify-between rounded border border-gray-300 px-3 py-2 text-left text-sm hover:bg-blue-50 disabled:opacity-50 disabled:hover:bg-white transition-colors"
                           >
                             <span
-                              className={
+                              className={`truncate mr-2 ${
                                 disabled ? "text-gray-400" : "text-gray-800"
-                              }
+                              }`}
                             >
-                              {nameOf(key)}
+                              {skill.name}
                             </span>
                             {cd > 0 ? (
-                              <span className="text-xs text-red-500 font-bold">
+                              <span className="text-xs text-red-500 font-bold shrink-0">
                                 ({cd})
                               </span>
                             ) : (
                               hotkey && (
-                                <span className="ml-2 rounded bg-gray-200 px-1 text-[10px] font-bold text-gray-600">
+                                <span className="shrink-0 rounded bg-gray-200 px-1 text-[10px] font-bold text-gray-600">
                                   {hotkey}
                                 </span>
                               )
@@ -237,7 +240,6 @@ const ActionMenu = ({
                 공격
               </ActionButton>
 
-              {/* 스킬 버튼 (개별 스킬 버튼 대신 토글 버튼 사용) */}
               <ActionButton
                 onClick={onToggleBattleSkills}
                 disabled={!canAct}

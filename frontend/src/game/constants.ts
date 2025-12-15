@@ -100,248 +100,109 @@ export const monsterList: MonsterList = {
 
 // 스킬 목록
 export const skills: Skill[] = [
-  // 마법사 스킬
+  // --- 전사 스킬 ---
   {
-    key: "hex",
-    name: "헥스",
+    key: 'power_strike',
+    name: '파워 스트라이크',
+    kind: 'attack',
+    description: '무기에 힘을 실어 적을 강타합니다.',
+    cooldown: 0, 
+    damageMultiplier: 1.2, // 공격력의 120%
+    growthPerLevel: 0.1,   // 레벨당 +10%
+    requiredLevel: 1,
+    allowedJobs: ['전사'],
+  },
+  {
+    key: 'slash',
+    name: '가르기',
+    kind: 'attack',
+    description: '적의 급소를 노려 치명적인 피해를 줍니다.',
+    cooldown: 3,
+    damageMultiplier: 2.5, // 250%
+    growthPerLevel: 0.2,   // +20%
     requiredLevel: 5,
-    description: "2턴 동안 적의 공격력이 20% 감소한다.",
-    allowedJobs: ["마법사"],
-    kind: "buff",
-    cooldown: 4,
-    duration: 2,
-    effect: { type: "weaken", value: 0.2 },
+    allowedJobs: ['전사'],
   },
   {
-    key: "IceAge",
-    name: "아이스 에이지",
+    key: 'iron_wall',
+    name: '아이언 윌',
+    kind: 'buff',
+    description: '3턴 동안 방어 태세를 취합니다.',
+    cooldown: 5,
+    duration: 3,
+    effect: { type: 'barrier', value: 0 }, 
+    requiredLevel: 10,
+    allowedJobs: ['전사'],
+  },
+
+  // --- 마법사 스킬 ---
+  {
+    key: 'fireball',
+    name: '파이어볼',
+    kind: 'attack',
+    description: '화염구를 날려 적을 태워버립니다.',
+    cooldown: 0,
+    damageMultiplier: 1.3, // 130%
+    growthPerLevel: 0.15,
+    requiredLevel: 1,
+    allowedJobs: ['마법사'],
+  },
+  {
+    key: 'recovery',
+    name: '치유',
+    kind: 'heal',
+    description: '마력으로 체력을 즉시 회복합니다.',
+    cooldown: 4,
+    damageMultiplier: 2.0, // 공격력(지능)의 200% 회복
+    growthPerLevel: 0.2,
     requiredLevel: 5,
-    description: "적을 1턴 동안 얼려서 기절시킨다.",
-    allowedJobs: ["마법사"],
-    kind: "attack",
-    cooldown: 4,
-    effect: { type: "stun", value: 1 },
+    allowedJobs: ['마법사'],
   },
   {
-    key: "manaShield",
-    name: "마나 실드",
+    key: 'thunder_bolt',
+    name: '썬더볼트',
+    kind: 'attack',
+    description: '강력한 번개를 내리꽂습니다.',
+    cooldown: 4,
+    damageMultiplier: 3.0, // 300%
+    growthPerLevel: 0.3,
     requiredLevel: 10,
-    description: "다음 1회의 적 공격을 무효화.",
-    allowedJobs: ["마법사"],
-    kind: "buff",
-    cooldown: 4,
-    duration: 2,
-    effect: { type: "barrier", value: 1 },
+    allowedJobs: ['마법사'],
+  },
+
+  // --- 도적 스킬 ---
+  {
+    key: 'double_stab',
+    name: '더블 스탭',
+    kind: 'attack',
+    description: '빠르게 찔러 피해를 줍니다.',
+    cooldown: 0,
+    damageMultiplier: 1.1, // 110%
+    growthPerLevel: 0.1,
+    requiredLevel: 1,
+    allowedJobs: ['도적'],
   },
   {
-    key: "arcaneSurge",
-    name: "아케인 서지",
-    requiredLevel: 10,
-    description: "다음 공격 +50% 강화.",
-    allowedJobs: ["마법사"],
-    kind: "buff",
-    cooldown: 4,
-    duration: 2,
-    effect: { type: "charge", value: 0.5 },
-  },
-  {
-    key: "phantomStrike",
-    name: "팬텀 스트라이크",
-    requiredLevel: 15,
-    description: "다음 공격이 방어를 무시한다.",
-    allowedJobs: ["마법사"],
-    kind: "buff",
-    cooldown: 4,
-    duration: 2,
-    effect: { type: "trueStrike", value: 1 },
-  },
-  {
-    key: "vampiricAura",
-    name: "뱀피릭 오라",
-    requiredLevel: 15,
-    description: "2턴 동안 가한 피해의 20%만큼 회복한다.",
-    allowedJobs: ["마법사"],
-    kind: "buff",
-    cooldown: 5,
-    duration: 2,
-    effect: { type: "lifesteal", value: 0.2 },
-  },
-  {
-    key: "drainingCurse",
-    name: "드레이닝 커스",
-    requiredLevel: 20,
-    description: "2턴 동안 가한 피해의 15% 흡혈.",
-    allowedJobs: ["마법사"],
-    kind: "buff",
-    cooldown: 5,
-    duration: 2,
-    effect: { type: "lifesteal", value: 0.15 },
-  },
-  {
-    key: "THEWORLD",
-    name: "더 월드",
-    requiredLevel: 20,
-    description: "시간을 멈추고 즉시 추가 턴을 얻는다.",
-    allowedJobs: ["마법사"],
-    kind: "attack",
+    key: 'poison_weapon',
+    name: '약점 포착',
+    kind: 'buff',
+    description: '3턴 동안 다음 공격이 치명타가 됩니다.',
     cooldown: 6,
-    effect: { type: "timeStop", value: 0 },
-  },
-
-  // 전사 스킬
-  {
-    key: "ironWill",
-    name: "아이언 윌",
+    duration: 3,
+    effect: { type: 'charge', value: 0.5 }, 
     requiredLevel: 5,
-    description: "다음 1회의 적 공격을 무효화.",
-    allowedJobs: ["전사"],
-    kind: "buff",
-    cooldown: 3,
-    duration: 2,
-    effect: { type: "barrier", value: 1 },
+    allowedJobs: ['도적'],
   },
   {
-    key: "arcaneBarrier",
-    name: "아케인 배리어",
-    requiredLevel: 5,
-    description: "다음 1회의 적 공격을 완전히 무효화한다.",
-    allowedJobs: ["전사"],
-    kind: "buff",
-    cooldown: 3,
-    duration: 2,
-    effect: { type: "barrier", value: 1 },
-  },
-  {
-    key: "battleCryWar",
-    name: "전장의 포효",
-    requiredLevel: 10,
-    description: "2턴 동안 적의 공격력이 20% 감소한다.",
-    allowedJobs: ["전사"],
-    kind: "buff",
-    cooldown: 4,
-    duration: 2,
-    effect: { type: "weaken", value: 0.2 },
-  },
-  {
-    key: "cleave",
-    name: "가르기",
-    requiredLevel: 10,
-    description: "다음 공격 2연타(2타 40% 피해).",
-    allowedJobs: ["전사"],
-    kind: "buff",
-    cooldown: 4,
-    duration: 2,
-    effect: { type: "multiStrike", value: 0.4 },
-  },
-  {
-    key: "crushingRoar",
-    name: "크러싱 로어",
-    requiredLevel: 15,
-    description: "2턴 동안 적 ATK -15%.",
-    allowedJobs: ["전사"],
-    kind: "buff",
-    cooldown: 4,
-    duration: 2,
-    effect: { type: "weaken", value: 0.15 },
-  },
-  {
-    key: "warSmash",
-    name: "분쇄 일격",
-    requiredLevel: 15,
-    description: "다음 공격이 +70% 강화된다.",
-    allowedJobs: ["전사"],
-    kind: "buff",
-    cooldown: 4,
-    duration: 2,
-    effect: { type: "charge", value: 0.7 },
-  },
-  {
-    key: "berserkRush",
-    name: "버서크 러시",
-    requiredLevel: 20,
-    description: "2턴 동안 가한 피해의 15% 흡혈.",
-    allowedJobs: ["전사"],
-    kind: "buff",
+    key: 'assassinate',
+    name: '암살',
+    kind: 'attack',
+    description: '적의 뒤를 노려 필살의 일격을 가합니다.',
     cooldown: 5,
-    duration: 2,
-    effect: { type: "lifesteal", value: 0.15 },
-  },
-
-  // 도적 스킬
-  {
-    key: "shadowVeil",
-    name: "섀도우 베일",
-    requiredLevel: 5,
-    description: "2턴 동안 모든 공격을 회피한다.",
-    allowedJobs: ["도적"],
-    kind: "buff",
-    cooldown: 4,
-    duration: 2,
-    effect: { type: "evade", value: 1 },
-  },
-  {
-    key: "bladeFlurry",
-    name: "블레이드 플러리",
-    requiredLevel: 5,
-    description: "다음 공격이 2회 적중(두 번째 타격은 45% 피해).",
-    allowedJobs: ["도적"],
-    kind: "buff",
-    cooldown: 4,
-    duration: 2,
-    effect: { type: "multiStrike", value: 0.45 },
-  },
-  {
-    key: "smokeBomb",
-    name: "스모크 밤",
+    damageMultiplier: 4.0, // 400%
+    growthPerLevel: 0.5,
     requiredLevel: 10,
-    description: "1턴 동안 모든 공격 회피.",
-    allowedJobs: ["도적"],
-    kind: "buff",
-    cooldown: 3,
-    duration: 1,
-    effect: { type: "evade", value: 1 },
-  },
-  {
-    key: "assassinatePrep",
-    name: "암살 준비",
-    requiredLevel: 10,
-    description: "다음 공격 방어 무시.",
-    allowedJobs: ["도적"],
-    kind: "buff",
-    cooldown: 4,
-    duration: 2,
-    effect: { type: "trueStrike", value: 1 },
-  },
-  {
-    key: "flurry",
-    name: "플러리",
-    requiredLevel: 15,
-    description: "다음 공격 2연타(2타 50% 피해).",
-    allowedJobs: ["도적"],
-    kind: "buff",
-    cooldown: 4,
-    duration: 2,
-    effect: { type: "multiStrike", value: 0.5 },
-  },
-  {
-    key: "nerveStrike",
-    name: "너브 스트라이크",
-    requiredLevel: 15,
-    description: "적 1턴 기절.",
-    allowedJobs: ["도적"],
-    kind: "attack",
-    cooldown: 5,
-    effect: { type: "stun", value: 1 },
-  },
-  {
-    key: "shadowBind",
-    name: "섀도우 바인드",
-    requiredLevel: 20,
-    description: "적을 1턴 동안 기절시킨다.",
-    allowedJobs: ["도적"],
-    kind: "attack",
-    cooldown: 5,
-    effect: { type: "stun", value: 1 },
+    allowedJobs: ['도적'],
   },
 ];
 
@@ -583,7 +444,7 @@ export const createBoss = (bossLevel: number): BossStats => {
   const bossSkills: SkillKey[] = [];
 
   if (bossLevel >= 5) {
-    const level5Skills: SkillKey[] = ["hex", "ironWill", "shadowVeil"];
+    const level5Skills: SkillKey[] = ["slash", "iron_wall"];
     level5Skills.forEach((skillKey) => {
       if (availableSkillKeys.has(skillKey)) {
         bossSkills.push(skillKey);
@@ -591,7 +452,7 @@ export const createBoss = (bossLevel: number): BossStats => {
     });
   }
   if (bossLevel >= 10) {
-    const level10Skills: SkillKey[] = ["battleCryWar", "cleave", "bladeFlurry"];
+    const level10Skills: SkillKey[] = ["slash", "double_stab", "poison_weapon"];
     level10Skills.forEach((skillKey) => {
       if (availableSkillKeys.has(skillKey)) {
         bossSkills.push(skillKey);
@@ -599,7 +460,7 @@ export const createBoss = (bossLevel: number): BossStats => {
     });
   }
   if (bossLevel >= 15) {
-    const level15Skills: SkillKey[] = ["warSmash", "crushingRoar", "flurry"];
+    const level15Skills: SkillKey[] = ["recovery", "iron_wall", "power_strike"];
     level15Skills.forEach((skillKey) => {
       if (availableSkillKeys.has(skillKey)) {
         bossSkills.push(skillKey);
@@ -608,9 +469,9 @@ export const createBoss = (bossLevel: number): BossStats => {
   }
   if (bossLevel >= 20) {
     const level20Skills: SkillKey[] = [
-      "berserkRush",
-      "vampiricAura",
-      "THEWORLD",
+      "recovery",
+      "power_strike",
+      "iron_wall",
     ];
     level20Skills.forEach((skillKey) => {
       if (availableSkillKeys.has(skillKey)) {

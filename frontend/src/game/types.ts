@@ -39,11 +39,11 @@ export interface Pet {
 // 스킬 키
 export type SkillKey =
   // 마법사
-  | "hex" | "manaShield" | "IceAge" | "arcaneSurge" | "phantomStrike" | "vampiricAura" | "drainingCurse" | "THEWORLD"
+  | "fireball" | "recovery" | "thunder_bolt"
   // 전사
-  | "ironWill" | "arcaneBarrier" | "battleCryWar" | "cleave" | "crushingRoar" | "warSmash" | "berserkRush"
+  | "power_strike" | "slash" | "iron_wall"
   // 도적
-  | "shadowVeil" | "bladeFlurry" | "smokeBomb" | "assassinatePrep" | "flurry" | "nerveStrike" | "shadowBind";
+  | "double_stab" | "poison_weapon" | "assassinate";
 
 // 플레이어 스탯 (중복 제거 및 모든 속성 병합)
 export interface PlayerStats extends CharacterStats {
@@ -90,9 +90,11 @@ export interface Skill {
   requiredLevel: number; // 배울 수 있는 최소 레벨
   description: string;
   allowedJobs?: Job[]; // 배울 수 있는 직업 제한 (없으면 전직업)
-  kind: "attack" | "buff";
+  kind: "attack" | "heal" | "buff";
   cooldown: number; // 재사용 대기 (플레이어 턴 기준)
-  duration?: number; // 지속 턴 수 (플레이어 턴 기준)
+	damageMultiplier?: number; // 기본 데미지/회복 계수 (예: 1.5 = 150%)
+  growthPerLevel?: number;   // 레벨당 증가하는 계수 (예: 0.1 = +10%)
+  duration?: number; // 버프 지속 턴 (플레이어 턴 기준)
   bonuses?: { atk?: number; def?: number; luk?: number };
   attackBonusMultiplier?: number;
   guaranteedCrit?: boolean;
