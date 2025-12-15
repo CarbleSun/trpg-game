@@ -65,21 +65,12 @@
     "ownedPetIds": [
       "wolf"
     ],
-    "skillPoints": 18,
-    "skills": [
-      "ironWill",
-      "cleave"
-    ],
-    "skillUpgradeLevels": {
-      "ironWill": 4,
-      "cleave": 5
-    },
+    "skillPoints": 56,
+    "skills": [],
+    "skillUpgradeLevels": {},
     "isDefending": false,
     "activeBuffs": [],
-    "skillCooldowns": {
-      "ironWill": 0,
-      "cleave": 0
-    }
+    "skillCooldowns": {}
   },
   "bossCooldowns": {
     "boss_25": 1765174567653
