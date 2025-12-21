@@ -1,4 +1,5 @@
 import type { PlayerStats, Skill } from '../game/types';
+import { getEffectivePlayerStats } from '../game/playerLogic';
 
 interface SkillsPanelProps {
   player: PlayerStats;
@@ -41,6 +42,15 @@ const SkillsPanel = ({ player, skills, onLearn }: SkillsPanelProps) => {
     } 
     else if (skill.kind === 'buff') {
       let text = skill.description;
+      
+      // trade_off 타입일 때 구체적인 수치 표시
+      if (skill.effect && skill.effect.type === 'trade_off') {
+        const effectiveStats = getEffectivePlayerStats(player);
+        const atkIncrease = Math.floor(effectiveStats.atk * skill.effect.value);
+        const defDecrease = Math.floor(effectiveStats.def * skill.effect.penalty);
+        text = `공격력 +${atkIncrease}, 방어력 -${defDecrease}`;
+      }
+      
       if (skill.duration) text += ` (${skill.duration}턴 지속)`;
       return text + cdText;
     }

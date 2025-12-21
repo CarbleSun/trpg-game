@@ -1770,7 +1770,25 @@ export const useGameEngine = () => {
         
 				if (skill.effect.type === 'trade_off') {
             // 1. 트레이드 오프 버프일 때 (마력 폭주 등)
-            logs.push({ msg: `🔥 [${skill.name}] 시전! (공격력 대폭 증가, 방어력 감소)`, type: 'normal' });
+            // 구체적인 수치 계산 (버프 적용 전 스탯 기준)
+            const weaponAtk = updatedPlayer.weapon?.value || 0;
+            const weaponEnhLevel = updatedPlayer.weapon ? ((updatedPlayer.weaponEnhanceLevels || {})[updatedPlayer.weapon.id] || 0) : 0;
+            const weaponEnhBonus = weaponEnhLevel * 5;
+            const armorDef = updatedPlayer.armor?.value || 0;
+            const armorEnhLevel = updatedPlayer.armor ? ((updatedPlayer.armorEnhanceLevels || {})[updatedPlayer.armor.id] || 0) : 0;
+            const armorEnhBonus = armorEnhLevel * 5;
+            
+            // 버프 적용 전 유효 스탯
+            const baseAtk = updatedPlayer.atk + weaponAtk + weaponEnhBonus;
+            const baseDef = updatedPlayer.def + armorDef + armorEnhBonus;
+            
+            // 공격력 증가량
+            const atkIncrease = Math.floor(baseAtk * skill.effect.value);
+            
+            // 방어력 감소량 (버프 적용 전 방어력 * penalty)
+            const defDecrease = Math.floor(baseDef * skill.effect.penalty);
+            
+            logs.push({ msg: `🔥 [${skill.name}] 시전! 공격력 +${atkIncrease}, 방어력 -${defDecrease} (${skill.duration}턴 지속)`, type: 'normal' });
          } else {
             // 2. 일반 버프일 때 (기존 대사 유지)
             logs.push({ msg: `🛡️ [${skill.name}] 시전! ${skill.duration}턴 동안 효과 지속.`, type: 'normal' });

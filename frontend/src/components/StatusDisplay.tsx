@@ -15,34 +15,51 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
   const armorEnh = player.armor ? ((player.armorEnhanceLevels || {})[player.armor.id] || 0) * 5 : 0;
   
 	// 버프 스탯 계산
-	const { buffAtk, buffDef } = useMemo(() => {
+	const { buffAtk, buffDef, totalAtk, totalDef } = useMemo(() => {
 		let bAtk = 0;
 		let bDef = 0;
 
-		const activeKeys: string[] = (player as any).activeBuffs || [];
+		// 유효 스탯 계산 (장비 포함)
+		const baseAtk = player.atk + weaponAtk + weaponEnh;
+		let baseDef = player.def + armorDef + armorEnh;
 
-		activeKeys.forEach((key) => {
-			const skillInfo = skills.find((s) => s.key === key);
+		// activeBuffs는 객체 배열
+		const activeBuffs = player.activeBuffs || [];
+
+		// 방어력 배율 적용 전 방어력 저장 (감소량 계산용)
+		const defBeforeBuffs = baseDef;
+
+		activeBuffs.forEach((buff) => {
+			const skillInfo = skills.find((s) => s.key === buff.key);
 
 			if (skillInfo && skillInfo.effect) {
 				if (skillInfo.effect.type === 'trade_off') {
+					// 공격력 증가: 유효 공격력 * value
 					if (skillInfo.effect.value) {
-						bAtk += Math.floor(player.atk * skillInfo.effect.value);
-					}
-					if (skillInfo.effect.penalty) {
-						bDef -= Math.floor(player.def * skillInfo.effect.penalty);
+						bAtk += Math.floor(baseAtk * skillInfo.effect.value);
 					}
 				}
-				// barrier 타입이나 charge 등 다른 타입에 대한 로직도 필요 시 여기에 추가
+				// charge 타입도 공격력 증가
+				else if (skillInfo.effect.type === 'charge' && skillInfo.effect.value) {
+					bAtk += Math.floor(baseAtk * skillInfo.effect.value);
+				}
+			}
+
+			// defenseMultiplier 적용 (곱셈)
+			if (buff.defenseMultiplier !== undefined) {
+				baseDef = Math.floor(baseDef * buff.defenseMultiplier);
 			}
 		});
 
-		return { buffAtk: bAtk, buffDef: bDef };
-	}, [player]);
+		// 방어력 감소량 계산
+		bDef = defBeforeBuffs - baseDef;
 
-	// 최종 스탯 합산 (버프 포함)
-	const totalAtk = player.atk + weaponAtk + weaponEnh + buffAtk;
-  const totalDef = player.def + armorDef + armorEnh + buffDef;
+		// 최종 스탯 계산
+		const finalAtk = baseAtk + bAtk;
+		const finalDef = Math.max(0, baseDef); // 음수 방지
+
+		return { buffAtk: bAtk, buffDef: bDef, totalAtk: finalAtk, totalDef: finalDef };
+	}, [player, weaponAtk, weaponEnh, armorDef, armorEnh]);
 
   // style.css의 .status, .info, .info-basic 등 변환
   return (
@@ -102,8 +119,8 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
 						{totalDef} ( {player.def} 
 						+ <span className="text-blue-500">{armorDef}</span>
 						{armorEnh > 0 && <> + <span className="text-sky-700">{armorEnh}</span></>} 
-						{buffDef !== 0 && (
-							<> {buffDef > 0 ? '+' : '-'} <span className='text-purple-600 font-bold'>Buff {Math.abs(buffDef)}</span></>
+						{buffDef > 0 && (
+							<> - <span className='text-purple-600 font-bold'>Buff {buffDef}</span></>
 						)}
 						)
 					</div>
