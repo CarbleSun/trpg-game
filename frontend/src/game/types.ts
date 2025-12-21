@@ -38,12 +38,12 @@ export interface Pet {
 
 // 스킬 키
 export type SkillKey =
+	// 전사
+  | "power_strike" | "slash" | "iron_wall" | "ground_smash" | "berserk" | "gigantic_slash"
   // 마법사
-  | "fireball" | "recovery" | "thunder_bolt"
-  // 전사
-  | "power_strike" | "slash" | "iron_wall"
+  | "fireball" | "recovery" | "thunder_bolt" | "ice_spear" | "mana_shield" | "meteor" | "mana_react"
   // 도적
-  | "double_stab" | "poison_weapon" | "assassinate";
+  | "double_stab" | "poison_weapon" | "assassinate" | "shadow_shuriken" | "smoke_bomb" | "illusion_dance";
 
 // 플레이어 스탯 (중복 제거 및 모든 속성 병합)
 export interface PlayerStats extends CharacterStats {
@@ -73,6 +73,7 @@ export interface PlayerStats extends CharacterStats {
     reflectPercent?: number;
     barrier?: boolean;
     chargeAttackMultiplier?: number;
+		defenseMultiplier?: number; // 방어력 배율
     counterDamage?: number;
     lifeStealPercent?: number;
     weakenPercent?: number;
@@ -103,6 +104,7 @@ export interface Skill {
     | { type: "reflect"; value: number }
     | { type: "barrier"; value: number }
     | { type: "charge"; value: number }
+		| { type: "trade_off"; value: number; penalty: number }
     | { type: "timeStop"; value: number }
     | { type: "counter"; value: number }
     | { type: "lifesteal"; value: number }
@@ -151,6 +153,7 @@ export interface BossStats extends CharacterStats {
     reflectPercent?: number;
     barrier?: boolean;
     chargeAttackMultiplier?: number;
+		defenseMultiplier?: number;
     counterDamage?: number;
     lifeStealPercent?: number;
     weakenPercent?: number;

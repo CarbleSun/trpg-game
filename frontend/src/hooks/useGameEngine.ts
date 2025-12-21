@@ -1751,11 +1751,30 @@ export const useGameEngine = () => {
             remainingTurns: skill.duration || 3,
             bonuses: {},
             barrier: skill.effect.type === 'barrier',
-            chargeAttackMultiplier: skill.effect.type === 'charge' ? skill.effect.value : 0,
-            // 필요한 다른 효과 플래그들 매핑
+
+						// 1. 공격력 증가 적용 (charge 또는 trade_off일 때)
+            chargeAttackMultiplier: (skill.effect.type === 'charge' || skill.effect.type === 'trade_off')
+						? skill.effect.value 
+						: 0,
+            
+						// 2. 방어력 감소 적용 (trade_off일 때만 penalty 적용)
+            defenseMultiplier: skill.effect.type === 'trade_off' 
+              ? (1 - skill.effect.penalty)  // 0.3이면 0.7(70%)가 됨
+              : 1,
+
+						// 기존 효과들 매핑
+            evadeAll: skill.effect.type === 'evade',
+            reflectPercent: skill.effect.type === 'reflect' ? skill.effect.value : 0,
          };
-         updatedPlayer.activeBuffs = [...(updatedPlayer.activeBuffs || []), newBuff];
-         logs.push({ msg: `🛡️ [${skill.name}] 시전! ${skill.duration}턴 동안 효과 지속.`, type: 'normal' });
+        updatedPlayer.activeBuffs = [...(updatedPlayer.activeBuffs || []), newBuff];
+        
+				if (skill.effect.type === 'trade_off') {
+            // 1. 트레이드 오프 버프일 때 (마력 폭주 등)
+            logs.push({ msg: `🔥 [${skill.name}] 시전! (공격력 대폭 증가, 방어력 감소)`, type: 'normal' });
+         } else {
+            // 2. 일반 버프일 때 (기존 대사 유지)
+            logs.push({ msg: `🛡️ [${skill.name}] 시전! ${skill.duration}턴 동안 효과 지속.`, type: 'normal' });
+         }
       }
     }
 

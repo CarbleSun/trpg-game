@@ -99,6 +99,7 @@ export const monsterList: MonsterList = {
 };
 
 // 스킬 목록
+// 스킬 습득은 10레벨 단위로 설정
 export const skills: Skill[] = [
   // --- 전사 스킬 ---
   {
@@ -106,7 +107,7 @@ export const skills: Skill[] = [
     name: '파워 스트라이크',
     kind: 'attack',
     description: '무기에 힘을 실어 적을 강타합니다.',
-    cooldown: 0, 
+    cooldown: 1, 
     damageMultiplier: 1.2, // 공격력의 120%
     growthPerLevel: 0.1,   // 레벨당 +10%
     requiredLevel: 1,
@@ -120,7 +121,7 @@ export const skills: Skill[] = [
     cooldown: 3,
     damageMultiplier: 2.5, // 250%
     growthPerLevel: 0.2,   // +20%
-    requiredLevel: 5,
+    requiredLevel: 10,
     allowedJobs: ['전사'],
   },
   {
@@ -134,6 +135,39 @@ export const skills: Skill[] = [
     requiredLevel: 10,
     allowedJobs: ['전사'],
   },
+	{
+    key: 'ground_smash',
+    name: '대지 분쇄',
+    kind: 'attack',
+    description: '땅을 내리쳐 충격파로 적을 공격합니다.',
+    cooldown: 4,
+    damageMultiplier: 3.0, // 300%
+    growthPerLevel: 0.25,
+    requiredLevel: 20,
+    allowedJobs: ['전사'],
+  },
+  {
+    key: 'berserk',
+    name: '폭주',
+    kind: 'buff',
+    description: '분노를 터뜨려 다음 공격을 매우 강력하게 만듭니다.',
+    cooldown: 8,
+    duration: 3,
+    effect: { type: 'trade_off', value: 0.8, penalty: 0.3 }, // 80% 데미지 증가 (기존 charge 활용)
+    requiredLevel: 20,
+    allowedJobs: ['전사'],
+  },
+  {
+    key: 'gigantic_slash',
+    name: '기가 슬래시',
+    kind: 'attack',
+    description: '전력을 다해 거대한 검기를 날립니다.',
+    cooldown: 6,
+    damageMultiplier: 4.5, // 450% 강력한 한방
+    growthPerLevel: 0.5,
+    requiredLevel: 30,
+    allowedJobs: ['전사'],
+  },
 
   // --- 마법사 스킬 ---
   {
@@ -141,7 +175,7 @@ export const skills: Skill[] = [
     name: '파이어볼',
     kind: 'attack',
     description: '화염구를 날려 적을 태워버립니다.',
-    cooldown: 0,
+    cooldown: 1,
     damageMultiplier: 1.3, // 130%
     growthPerLevel: 0.15,
     requiredLevel: 1,
@@ -155,7 +189,7 @@ export const skills: Skill[] = [
     cooldown: 4,
     damageMultiplier: 2.0, // 공격력(지능)의 200% 회복
     growthPerLevel: 0.2,
-    requiredLevel: 5,
+    requiredLevel: 10,
     allowedJobs: ['마법사'],
   },
   {
@@ -169,6 +203,51 @@ export const skills: Skill[] = [
     requiredLevel: 10,
     allowedJobs: ['마법사'],
   },
+	{
+    key: 'ice_spear',
+    name: '아이스 스피어',
+    kind: 'attack',
+    description: '날카로운 얼음 창을 소환하여 관통합니다.',
+    cooldown: 3,
+    damageMultiplier: 2.8, // 280%
+    growthPerLevel: 0.25,
+    requiredLevel: 20,
+    allowedJobs: ['마법사'],
+  },
+  {
+    key: 'mana_shield',
+    name: '마나 쉴드',
+    kind: 'buff',
+    description: '마력으로 보호막을 형성하여 피해를 흡수합니다.',
+    cooldown: 6,
+    duration: 3,
+    effect: { type: 'barrier', value: 0 }, // 기존 barrier 로직 활용
+    requiredLevel: 20,
+    allowedJobs: ['마법사'],
+  },
+  {
+    key: 'meteor',
+    name: '메테오',
+    kind: 'attack',
+    description: '거대한 운석을 소환하여 전장을 초토화합니다.',
+    cooldown: 8,
+    damageMultiplier: 5.0, // 500% 궁극기급 데미지
+    growthPerLevel: 0.6,
+    requiredLevel: 30,
+    allowedJobs: ['마법사'],
+  },
+	{
+    key: 'mana_react',
+    name: '마력 폭주',
+    kind: 'buff',
+    description: '마력을 한계까지 끌어올립니다. 그 대가로 신체가 약화됩니다.',
+    cooldown: 6,
+    duration: 2, 
+    requiredLevel: 25,
+    allowedJobs: ['마법사'],
+    // value: 0.5 (공격력 +50%), penalty: 0.3 (방어력 -30%)
+    effect: { type: 'trade_off', value: 0.5, penalty: 0.3 }, 
+  },
 
   // --- 도적 스킬 ---
   {
@@ -176,7 +255,7 @@ export const skills: Skill[] = [
     name: '더블 스탭',
     kind: 'attack',
     description: '빠르게 찔러 피해를 줍니다.',
-    cooldown: 0,
+    cooldown: 1,
     damageMultiplier: 1.1, // 110%
     growthPerLevel: 0.1,
     requiredLevel: 1,
@@ -190,7 +269,7 @@ export const skills: Skill[] = [
     cooldown: 6,
     duration: 3,
     effect: { type: 'charge', value: 0.5 }, 
-    requiredLevel: 5,
+    requiredLevel: 10,
     allowedJobs: ['도적'],
   },
   {
@@ -202,6 +281,39 @@ export const skills: Skill[] = [
     damageMultiplier: 4.0, // 400%
     growthPerLevel: 0.5,
     requiredLevel: 10,
+    allowedJobs: ['도적'],
+  },
+	{
+    key: 'shadow_shuriken',
+    name: '그림자 표창',
+    kind: 'attack',
+    description: '어둠 속에서 표창을 던져 기습합니다.',
+    cooldown: 2, // 짧은 쿨타임
+    damageMultiplier: 2.2, // 220%
+    growthPerLevel: 0.2,
+    requiredLevel: 20,
+    allowedJobs: ['도적'],
+  },
+  {
+    key: 'smoke_bomb',
+    name: '연막탄',
+    kind: 'buff',
+    description: '연막을 뿌려 적의 공격을 회피(방어)합니다.',
+    cooldown: 7,
+    duration: 2,
+    effect: { type: 'barrier', value: 0 }, // 도적 컨셉의 방어막(회피 느낌)
+    requiredLevel: 20,
+    allowedJobs: ['도적'],
+  },
+  {
+    key: 'illusion_dance',
+    name: '환영검무',
+    kind: 'attack',
+    description: '보이지 않는 속도로 난무하여 적을 베어버립니다.',
+    cooldown: 6,
+    damageMultiplier: 4.2, // 420%
+    growthPerLevel: 0.4,
+    requiredLevel: 30,
     allowedJobs: ['도적'],
   },
 ];
@@ -460,7 +572,7 @@ export const createBoss = (bossLevel: number): BossStats => {
     });
   }
   if (bossLevel >= 15) {
-    const level15Skills: SkillKey[] = ["recovery", "iron_wall", "power_strike"];
+    const level15Skills: SkillKey[] = ["slash", "iron_wall", "power_strike"];
     level15Skills.forEach((skillKey) => {
       if (availableSkillKeys.has(skillKey)) {
         bossSkills.push(skillKey);
@@ -468,11 +580,7 @@ export const createBoss = (bossLevel: number): BossStats => {
     });
   }
   if (bossLevel >= 20) {
-    const level20Skills: SkillKey[] = [
-      "recovery",
-      "power_strike",
-      "iron_wall",
-    ];
+    const level20Skills: SkillKey[] = ["slash", "power_strike", "iron_wall",];
     level20Skills.forEach((skillKey) => {
       if (availableSkillKeys.has(skillKey)) {
         bossSkills.push(skillKey);

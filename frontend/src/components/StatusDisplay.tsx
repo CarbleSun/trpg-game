@@ -1,4 +1,6 @@
+import { useMemo } from 'react';
 import type { PlayerStats } from '../game/types';
+import { skills } from '../game/constants';
 import ProgressBar from './ProgressBar';
 
 interface StatusDisplayProps {
@@ -11,21 +13,49 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
   const armorDef = player.armor?.value || 0;
   const weaponEnh = player.weapon ? ((player.weaponEnhanceLevels || {})[player.weapon.id] || 0) * 5 : 0;
   const armorEnh = player.armor ? ((player.armorEnhanceLevels || {})[player.armor.id] || 0) * 5 : 0;
-  const totalAtk = player.atk + weaponAtk + weaponEnh;
-  const totalDef = player.def + armorDef + armorEnh;
+  
+	// 버프 스탯 계산
+	const { buffAtk, buffDef } = useMemo(() => {
+		let bAtk = 0;
+		let bDef = 0;
+
+		const activeKeys: string[] = (player as any).activeBuffs || [];
+
+		activeKeys.forEach((key) => {
+			const skillInfo = skills.find((s) => s.key === key);
+
+			if (skillInfo && skillInfo.effect) {
+				if (skillInfo.effect.type === 'trade_off') {
+					if (skillInfo.effect.value) {
+						bAtk += Math.floor(player.atk * skillInfo.effect.value);
+					}
+					if (skillInfo.effect.penalty) {
+						bDef -= Math.floor(player.def * skillInfo.effect.penalty);
+					}
+				}
+				// barrier 타입이나 charge 등 다른 타입에 대한 로직도 필요 시 여기에 추가
+			}
+		});
+
+		return { buffAtk: bAtk, buffDef: bDef };
+	}, [player]);
+
+	// 최종 스탯 합산 (버프 포함)
+	const totalAtk = player.atk + weaponAtk + weaponEnh + buffAtk;
+  const totalDef = player.def + armorDef + armorEnh + buffDef;
 
   // style.css의 .status, .info, .info-basic 등 변환
   return (
     <div className="mt-10 flex flex-wrap border-b border-gray-300 pb-6 font-stat text-gray-800 md:flex-nowrap">
       
-      {/* 기본 정보 (style.css .info-basic) */}
+      {/* 기본 정보 */}
       <div className="w-1/2 grow p-4 md:w-auto">
         <div className="text-xl font-bold">{player.name}</div>
         <div className="my-1">{player.job}</div>
         <div>{player.money} Gold</div>
       </div>
 
-      {/* 레벨/경험치 (style.css .info-level) */}
+      {/* 레벨/경험치  */}
       <div className="w-full grow p-4 md:w-auto md:flex-basis-1/4">
         <div className="flex items-end">
           <strong className="mr-3">LEVEL</strong>
@@ -37,7 +67,7 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
         </div>
       </div>
 
-      {/* HP (style.css .info-health) */}
+      {/* HP */}
       <div className="w-full grow p-4 md:w-auto md:flex-basis-1/3">
         <div className="relative">
           <strong className="text-md">HP</strong>
@@ -49,18 +79,41 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
 
 			{/* 스탯 및 장비 표시 */}
       <div className="w-full grow p-4 text-sm md:w-auto">
+
+				{/* 공격력 */}
         <div className="flex">
           <div className="mr-2 min-w-[30px] text-red-600">ATK</div>
-          <div className="text-gray-700">{totalAtk} ( {player.atk} + <span className="text-red-500">{weaponAtk}</span>{weaponEnh > 0 ? <> + <span className="text-rose-600">{weaponEnh}</span></> : null} )</div>
+          <div className="text-gray-700">
+						{totalAtk} ( {player.atk} 
+						+ <span className="text-red-500">{weaponAtk}</span>
+						{weaponEnh > 0 && <> + <span className="text-rose-600">{weaponEnh}</span></>}
+						{/* 버프 수치 표시 (0이 아닌 경우에만) */}
+						{buffAtk !== 0 && (
+							<> + <span className='text-purple-600 font-bold'>Buff {buffAtk}</span></>
+						)}
+						)
+					</div>
         </div>
+
+				{/* 방어력 */}
         <div className="flex">
           <div className="mr-2 min-w-[30px] text-blue-600">DEF</div>
-          <div className="text-gray-700">{totalDef} ( {player.def} + <span className="text-blue-500">{armorDef}</span>{armorEnh > 0 ? <> + <span className="text-sky-700">{armorEnh}</span></> : null} )</div>
+          <div className="text-gray-700">
+						{totalDef} ( {player.def} 
+						+ <span className="text-blue-500">{armorDef}</span>
+						{armorEnh > 0 && <> + <span className="text-sky-700">{armorEnh}</span></>} 
+						{buffDef !== 0 && (
+							<> {buffDef > 0 ? '+' : '-'} <span className='text-purple-600 font-bold'>Buff {Math.abs(buffDef)}</span></>
+						)}
+						)
+					</div>
         </div>
+
         <div className="flex">
           <div className="mr-2 min-w-[30px] text-green-600">LUK</div>
           <div className="text-gray-700">{player.luk}</div>
         </div>
+
         <div className="mt-2 border-t pt-2">
           <div className="text-xs text-gray-500">
             무기: {player.weapon ? `${player.weapon.name}${weaponEnh > 0 ? ` [${(player.weaponEnhanceLevels || {})[player.weapon.id] || 0}강]` : ''}` : '없음'}
@@ -74,7 +127,7 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
         </div>
       </div>
 
-      {/* 승/패 (style.css .info-history) */}
+      {/* 승/패 */}
       <div className="w-1/2 grow p-4 text-sm md:w-auto">
         <div className="flex justify-end">
           <div className="mr-2 min-w-[30px]">승리</div>
