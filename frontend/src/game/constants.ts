@@ -111,6 +111,7 @@ export const skills: Skill[] = [
     damageMultiplier: 1.2, // 공격력의 120%
     growthPerLevel: 0.1,   // 레벨당 +10%
     requiredLevel: 1,
+		maxLevel: 10,
     allowedJobs: ['전사'],
   },
   {
@@ -122,6 +123,7 @@ export const skills: Skill[] = [
     damageMultiplier: 2.5, // 250%
     growthPerLevel: 0.2,   // +20%
     requiredLevel: 10,
+		maxLevel: 10,
     allowedJobs: ['전사'],
   },
   {
@@ -133,6 +135,7 @@ export const skills: Skill[] = [
     duration: 3,
     effect: { type: 'barrier', value: 0 }, 
     requiredLevel: 10,
+		maxLevel: 1,
     allowedJobs: ['전사'],
   },
 	{
@@ -144,6 +147,7 @@ export const skills: Skill[] = [
     damageMultiplier: 3.0, // 300%
     growthPerLevel: 0.25,
     requiredLevel: 20,
+		maxLevel: 10,
     allowedJobs: ['전사'],
   },
   {
@@ -154,7 +158,9 @@ export const skills: Skill[] = [
     cooldown: 8,
     duration: 3,
     effect: { type: 'trade_off', value: 0.8, penalty: 0.3 }, // 80% 데미지 증가 (기존 charge 활용)
-    requiredLevel: 20,
+    growthPerLevel: 0.1,
+		requiredLevel: 20,
+		maxLevel: 10,
     allowedJobs: ['전사'],
   },
   {
@@ -166,6 +172,7 @@ export const skills: Skill[] = [
     damageMultiplier: 4.5, // 450% 강력한 한방
     growthPerLevel: 0.5,
     requiredLevel: 30,
+		maxLevel: 10,
     allowedJobs: ['전사'],
   },
 
@@ -179,6 +186,7 @@ export const skills: Skill[] = [
     damageMultiplier: 1.3, // 130%
     growthPerLevel: 0.15,
     requiredLevel: 1,
+		maxLevel: 10,
     allowedJobs: ['마법사'],
   },
   {
@@ -190,6 +198,7 @@ export const skills: Skill[] = [
     damageMultiplier: 2.0, // 공격력(지능)의 200% 회복
     growthPerLevel: 0.2,
     requiredLevel: 10,
+		maxLevel: 1,
     allowedJobs: ['마법사'],
   },
   {
@@ -201,6 +210,7 @@ export const skills: Skill[] = [
     damageMultiplier: 3.0, // 300%
     growthPerLevel: 0.3,
     requiredLevel: 10,
+		maxLevel: 10,
     allowedJobs: ['마법사'],
   },
 	{
@@ -212,6 +222,7 @@ export const skills: Skill[] = [
     damageMultiplier: 2.8, // 280%
     growthPerLevel: 0.25,
     requiredLevel: 20,
+		maxLevel: 10,
     allowedJobs: ['마법사'],
   },
   {
@@ -223,6 +234,7 @@ export const skills: Skill[] = [
     duration: 3,
     effect: { type: 'barrier', value: 0 }, // 기존 barrier 로직 활용
     requiredLevel: 20,
+		maxLevel: 1,
     allowedJobs: ['마법사'],
   },
   {
@@ -234,6 +246,7 @@ export const skills: Skill[] = [
     damageMultiplier: 5.0, // 500% 궁극기급 데미지
     growthPerLevel: 0.6,
     requiredLevel: 30,
+		maxLevel: 10,
     allowedJobs: ['마법사'],
   },
 	{
@@ -244,6 +257,8 @@ export const skills: Skill[] = [
     cooldown: 6,
     duration: 2, 
     requiredLevel: 25,
+		growthPerLevel: 0.1,
+		maxLevel: 10,
     allowedJobs: ['마법사'],
     // value: 0.5 (공격력 +50%), penalty: 0.3 (방어력 -30%)
     effect: { type: 'trade_off', value: 0.5, penalty: 0.3 }, 
@@ -259,6 +274,7 @@ export const skills: Skill[] = [
     damageMultiplier: 1.1, // 110%
     growthPerLevel: 0.1,
     requiredLevel: 1,
+		maxLevel: 10,
     allowedJobs: ['도적'],
   },
   {
@@ -270,6 +286,7 @@ export const skills: Skill[] = [
     duration: 3,
     effect: { type: 'charge', value: 0.5 }, 
     requiredLevel: 10,
+		maxLevel: 10,
     allowedJobs: ['도적'],
   },
   {
@@ -281,6 +298,7 @@ export const skills: Skill[] = [
     damageMultiplier: 4.0, // 400%
     growthPerLevel: 0.5,
     requiredLevel: 10,
+		maxLevel: 10,
     allowedJobs: ['도적'],
   },
 	{
@@ -292,6 +310,7 @@ export const skills: Skill[] = [
     damageMultiplier: 2.2, // 220%
     growthPerLevel: 0.2,
     requiredLevel: 20,
+		maxLevel: 10,
     allowedJobs: ['도적'],
   },
   {
@@ -303,6 +322,7 @@ export const skills: Skill[] = [
     duration: 2,
     effect: { type: 'barrier', value: 0 }, // 도적 컨셉의 방어막(회피 느낌)
     requiredLevel: 20,
+		maxLevel: 1,
     allowedJobs: ['도적'],
   },
   {
@@ -314,6 +334,7 @@ export const skills: Skill[] = [
     damageMultiplier: 4.2, // 420%
     growthPerLevel: 0.4,
     requiredLevel: 30,
+		maxLevel: 10,
     allowedJobs: ['도적'],
   },
 ];

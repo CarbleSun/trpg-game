@@ -9,12 +9,24 @@ interface SkillsPanelProps {
 
 const SkillsPanel = ({ player, skills, onLearn }: SkillsPanelProps) => {
   const learned = new Set(player.skills || []);
+
+	// 스킬 비용 계산 함수 (현재 레벨 + 1)
+	const getSkillCost = (currentLevel: number) => currentLevel + 1;
+
   const canLearn = (s: Skill) => {
-    if (player.level < s.requiredLevel) return false;
-    if ((player.skillPoints || 0) <= 0) return false;
-    // 이미 배운 스킬이면 레벨 체크
-    const currentLevel = (player.skillUpgradeLevels || {})[s.key] || 0;
-    if (currentLevel >= 5) return false; // 최대 레벨 도달
+ 		const currentLevel = (player.skillUpgradeLevels || {})[s.key] || 0;
+
+		// 마스터 레벨 체크 (데이터에 없으면 기본 5)
+		const maxLevel = s.maxLevel || 5;
+    if (currentLevel >= maxLevel) return false; // 최대 레벨 도달
+
+		// 요구 레벨 체크
+		if (player.level < s.requiredLevel) return false;
+
+		// 포인트 체크 (비용 증가 반영)
+		const cost = getSkillCost(currentLevel);
+		if ((player.skillPoints || 0) < cost) return false;
+
     return true;
   };
 
@@ -42,15 +54,28 @@ const SkillsPanel = ({ player, skills, onLearn }: SkillsPanelProps) => {
     } 
     else if (skill.kind === 'buff') {
       let text = skill.description;
+
+			// 버프 성장 수치 계산
+      const baseValue = skill.effect?.value || 0;
+      const growth = skill.growthPerLevel || 0;
+      const currentValue = baseValue + (currentLevel * growth);
       
       // trade_off 타입일 때 구체적인 수치 표시
       if (skill.effect && skill.effect.type === 'trade_off') {
         const effectiveStats = getEffectivePlayerStats(player);
-        const atkIncrease = Math.floor(effectiveStats.atk * skill.effect.value);
+
+				// 현재 스탯 기준 증가량 계산 (성장치 반영)
+        const atkIncrease = Math.floor(effectiveStats.atk * currentValue);
         const defDecrease = Math.floor(effectiveStats.def * skill.effect.penalty);
-        text = `공격력 +${atkIncrease}, 방어력 -${defDecrease}`;
+        
+				text = `공격력 +${atkIncrease}, 방어력 -${defDecrease}`;
+				if (growth > 0) text += ` (Lv당 +${growth * 100}%)`;
       }
-      
+      // charge 타입일 때
+			else if (skill.effect && skill.effect.type === 'charge') {
+         if (growth > 0) text += ` (효과: ${(currentValue * 100).toFixed(0)}%, Lv당 +${growth * 100}%)`;
+      }
+			
       if (skill.duration) text += ` (${skill.duration}턴 지속)`;
       return text + cdText;
     }
@@ -74,7 +99,7 @@ const SkillsPanel = ({ player, skills, onLearn }: SkillsPanelProps) => {
       </div>
       
       <div className="mb-4 rounded bg-blue-50 p-2 text-center text-xs text-blue-600">
-        ⬆️ 배울 때마다 효과가 강해집니다 (최대 5번)
+        ⬆️ 스킬 레벨이 오를수록 효과와 필요 포인트가 증가합니다.
       </div>
 
       <div className="flex flex-col gap-6">
@@ -88,7 +113,28 @@ const SkillsPanel = ({ player, skills, onLearn }: SkillsPanelProps) => {
                 .map((s) => {
                   const isLearned = learned.has(s.key);
                   const eligible = canLearn(s);
+
+									// 현재 레벨, 최대 레벨, 비용 계산
                   const currentLevel = (player.skillUpgradeLevels || {})[s.key] || 0;
+									const maxLevel = s.maxLevel || 5;
+                  const cost = getSkillCost(currentLevel);
+
+									// 버튼 텍스트 결정
+                  let btnText = '불가';
+                  if (currentLevel >= maxLevel) {
+                    btnText = '최대';
+                  } else if (eligible) {
+                    // 배울 수 있음 (비용 표시)
+                    btnText = isLearned ? `강화 (-${cost}P)` : `배우기 (-${cost}P)`;
+                  } else {
+                    // 배울 수 없음 (이유 표시)
+                    if (player.level < s.requiredLevel) {
+                       btnText = `Lv.${s.requiredLevel} 필요`;
+                    } else if ((player.skillPoints || 0) < cost) {
+                       btnText = `P 부족 (${cost})`;
+                    }
+                  }
+
                   return (
                     <div key={s.key} className="rounded border border-gray-200 p-3">
                       <div className="flex items-center justify-between">
@@ -99,7 +145,7 @@ const SkillsPanel = ({ player, skills, onLearn }: SkillsPanelProps) => {
                           </div>
                           {isLearned && (
                             <div className="mt-1 text-xs">
-                              <span className="text-green-700">배움 Lv.{currentLevel}/5</span>
+                              <span className="text-green-700">배움 Lv.{currentLevel}/{maxLevel}</span>
                             </div>
                           )}
                         </div>
@@ -109,7 +155,7 @@ const SkillsPanel = ({ player, skills, onLearn }: SkillsPanelProps) => {
                             disabled={!eligible}
                             className="rounded border border-gray-700 px-3 py-1 text-sm font-stat enabled:hover:bg-green-600 enabled:hover:text-white disabled:opacity-50"
                           >
-                            {currentLevel >= 5 ? '최대' : eligible ? (isLearned ? `배우기 (${currentLevel}/5)` : '배우기') : '불가'}
+                            {btnText}
                           </button>
                         </div>
                       </div>

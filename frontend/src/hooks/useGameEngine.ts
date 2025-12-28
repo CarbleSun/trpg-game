@@ -119,7 +119,7 @@ export const useGameEngine = () => {
       player,
       bossCooldowns,
       dungeonKillCounts,
-      logMessages: logMessages.slice(-50), // 최근 50개 로그만 저장
+      logMessages: logMessages.slice(-50), // 최근 50개 로그만 저
       timestamp: Date.now(),
       slot,
     };
@@ -407,11 +407,19 @@ export const useGameEngine = () => {
   const learnSkill = (key: SkillKey) => {
     if (!player) return;
 
-		// 현재 스킬 레벨 확인
+		const skill = allSkills.find((s) => s.key === key)!;
+
+		// 현재 스킬 레벨 및 마스터 레벨 확인
 		const currentLevel = (player.skillUpgradeLevels || {})[key] || 0;
+		const masterLevel = skill.maxLevel || 5; // 설정 없으면 기본 5
+
+		// 마스터 레벨 도달 시 즉시 중단
+    if (currentLevel >= masterLevel) {
+      addLog(`🚫 "${skill.name}" 스킬 레벨을 더이상 올릴 수 없습니다! (Max Lv.${masterLevel})`, "fail");
+      return;
+    }
 
 		// 비용 계산 (레벨업 할 때마다 1씩 증가: 1 -> 2 -> 3 ...)
-    // 처음 배울 때(0->1)는 1포인트, 1->2는 2포인트 소모
     const cost = currentLevel + 1;
 
 		if (!canLearnSkill(player, key)) {
@@ -425,10 +433,9 @@ export const useGameEngine = () => {
 			addLog(`🚫 스킬 포인트가 부족합니다. (필요: ${cost} P / 보유: ${player.skillPoints} P)`, "fail");
       return;
 		}
-
-    const skill = allSkills.find((s) => s.key === key)!;
+    
+		// 스킬 레벨업 처리
     const newLevel = currentLevel + 1;
-
     const updatedSkills = player.skills.includes(key)
       ? player.skills
       : [...player.skills, key];
@@ -445,10 +452,10 @@ export const useGameEngine = () => {
     setPlayer(updated);
 
     if (currentLevel === 0) {
-      addLog(`📘 "${skill.name}" 스킬을 배웠다! (Lv.${newLevel}/5)`, "normal");
+      addLog(`📘 "${skill.name}" 스킬을 배웠다! (Lv.${newLevel}/${masterLevel}) [소모: ${cost}P]`, "normal");
     } else {
       addLog(
-        `📘 "${skill.name}" 스킬 강화에 성공했습니다! (Lv.${newLevel}/5)`,
+        `📘 "${skill.name}" 스킬 강화에 성공했습니다! (Lv.${newLevel}/${masterLevel}) [소모: ${cost}P]`,
         "normal"
       );
     }
@@ -1760,6 +1767,12 @@ export const useGameEngine = () => {
     } else if (skill.kind === 'buff') {
       // --- 버프 스킬 ---
       if (skill.effect) {
+				// 버프 수치 성장 로직 적용
+         const baseValue = skill.effect.value || 0;
+         const growth = skill.growthPerLevel || 0;
+         // 현재 레벨만큼 수치 증가 (0레벨 = 기본, 1레벨 = 기본 + 성장)
+         const enhancedValue = baseValue + (skillLevel * growth);
+
          const newBuff = {
             key: skill.key,
             remainingTurns: skill.duration || 3,
@@ -1768,7 +1781,7 @@ export const useGameEngine = () => {
 
 						// 1. 공격력 증가 적용 (charge 또는 trade_off일 때)
             chargeAttackMultiplier: (skill.effect.type === 'charge' || skill.effect.type === 'trade_off')
-						? skill.effect.value 
+						? enhancedValue
 						: 0,
             
 						// 2. 방어력 감소 적용 (trade_off일 때만 penalty 적용)
@@ -1797,7 +1810,7 @@ export const useGameEngine = () => {
             const baseDef = updatedPlayer.def + armorDef + armorEnhBonus;
             
             // 공격력 증가량
-            const atkIncrease = Math.floor(baseAtk * skill.effect.value);
+            const atkIncrease = Math.floor(baseAtk * enhancedValue);
             
             // 방어력 감소량 (버프 적용 전 방어력 * penalty)
             const defDecrease = Math.floor(baseDef * skill.effect.penalty);

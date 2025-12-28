@@ -96,6 +96,7 @@ export interface Skill {
 	damageMultiplier?: number; // 기본 데미지/회복 계수 (예: 1.5 = 150%)
   growthPerLevel?: number;   // 레벨당 증가하는 계수 (예: 0.1 = +10%)
   duration?: number; // 버프 지속 턴 (플레이어 턴 기준)
+	maxLevel?: number; // 스킬의 마스터 레벨 (없으면 기본값 5로 처리 예정)
   bonuses?: { atk?: number; def?: number; luk?: number };
   attackBonusMultiplier?: number;
   guaranteedCrit?: boolean;

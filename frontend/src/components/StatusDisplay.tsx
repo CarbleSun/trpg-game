@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { PlayerStats } from '../game/types';
-import { skills } from '../game/constants';
+// import { skills } from '../game/constants';
 import ProgressBar from './ProgressBar';
 
 interface StatusDisplayProps {
@@ -17,9 +17,9 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
 	// 버프 스탯 계산
 	const { buffAtk, buffDef, totalAtk, totalDef } = useMemo(() => {
 		let bAtk = 0;
-		let bDef = 0;
+		let bDef = 0;  // 방어력 '감소량'을 저장할 변수
 
-		// 유효 스탯 계산 (장비 포함)
+		// 유효 스탯 계산 (캐릭터 + 장비 + 강화)
 		const baseAtk = player.atk + weaponAtk + weaponEnh;
 		let baseDef = player.def + armorDef + armorEnh;
 
@@ -30,28 +30,21 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
 		const defBeforeBuffs = baseDef;
 
 		activeBuffs.forEach((buff) => {
-			const skillInfo = skills.find((s) => s.key === buff.key);
+			// constants의 skills를 찾지 않고, buff 객체에 저장된 실시간 수치를 사용
+      // 공격력 증가 계산 (charge, trade_off 등 모든 공격 배율)
+      // useGameEngine에서 이미 레벨업이 반영된 수치를 넣어둠
+			if (buff.chargeAttackMultiplier && buff.chargeAttackMultiplier > 0) {
+        bAtk += Math.floor(baseAtk * buff.chargeAttackMultiplier);
+      }
 
-			if (skillInfo && skillInfo.effect) {
-				if (skillInfo.effect.type === 'trade_off') {
-					// 공격력 증가: 유효 공격력 * value
-					if (skillInfo.effect.value) {
-						bAtk += Math.floor(baseAtk * skillInfo.effect.value);
-					}
-				}
-				// charge 타입도 공격력 증가
-				else if (skillInfo.effect.type === 'charge' && skillInfo.effect.value) {
-					bAtk += Math.floor(baseAtk * skillInfo.effect.value);
-				}
-			}
-
-			// defenseMultiplier 적용 (곱셈)
-			if (buff.defenseMultiplier !== undefined) {
-				baseDef = Math.floor(baseDef * buff.defenseMultiplier);
-			}
+			// 2. 방어력 배율 적용 (감소 또는 증가)
+      if (buff.defenseMultiplier !== undefined) {
+        baseDef = Math.floor(baseDef * buff.defenseMultiplier);
+      }
 		});
 
-		// 방어력 감소량 계산
+		// 방어력 변동량 계산 (원본 - 현재)
+    // 예: 원본 100 -> 버프후 70 => 차이 30 (이 값을 UI에 마이너스로 표시)
 		bDef = defBeforeBuffs - baseDef;
 
 		// 최종 스탯 계산
@@ -118,10 +111,14 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
           <div className="text-gray-700">
 						{totalDef} ( {player.def} 
 						+ <span className="text-blue-500">{armorDef}</span>
-						{armorEnh > 0 && <> + <span className="text-sky-700">{armorEnh}</span></>} 
-						{buffDef > 0 && (
+						{armorEnh > 0 && <> + <span className="text-sky-700">{armorEnh}</span></>}
+
+						{/* 방어력 감소 시 마이너스로 표시, 증가 시 플러스로 표시 */}
+						{buffDef > 0 ? (
 							<> - <span className='text-purple-600 font-bold'>Buff {buffDef}</span></>
-						)}
+						) : buffDef < 0 ? (
+							<> + <span className='text-purple-600 font-bold'>Buff {buffDef}</span></>
+						) : null}
 						)
 					</div>
         </div>

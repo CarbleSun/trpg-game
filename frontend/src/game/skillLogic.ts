@@ -37,7 +37,12 @@ export const canLearnSkill = (p: PlayerStats, key: SkillKey): boolean => {
   if (p.level < skill.requiredLevel) return false;
   if (skill.allowedJobs && !skill.allowedJobs.includes(p.job)) return false;
   if ((p.skillPoints || 0) <= 0) return false;
+
   const currentLevel = (p.skillUpgradeLevels || {})[key] || 0;
-  if (currentLevel >= 5) return false; // 최대 레벨
+	
+	// 데이터에 maxLevel이 있으면 그걸 쓰고, 없으면 기본 5
+	const masterLevel = skill.maxLevel || 5;
+
+  if (currentLevel >= masterLevel) return false; // 최대 레벨
   return true;
 };
