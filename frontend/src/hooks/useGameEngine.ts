@@ -406,13 +406,27 @@ export const useGameEngine = () => {
    */
   const learnSkill = (key: SkillKey) => {
     if (!player) return;
-    if (!canLearnSkill(player, key)) {
+
+		// 현재 스킬 레벨 확인
+		const currentLevel = (player.skillUpgradeLevels || {})[key] || 0;
+
+		// 비용 계산 (레벨업 할 때마다 1씩 증가: 1 -> 2 -> 3 ...)
+    // 처음 배울 때(0->1)는 1포인트, 1->2는 2포인트 소모
+    const cost = currentLevel + 1;
+
+		if (!canLearnSkill(player, key)) {
       // 순수 로직 호출
       addLog("🚫 스킬을 배울 수 없습니다.", "fail");
       return;
     }
+
+		// 스킬 포인트 부족 확인 (비용이 1보다 클 수 있으므로 별도 체크 필요)
+		if ((player.skillPoints || 0) < cost) {
+			addLog(`🚫 스킬 포인트가 부족합니다. (필요: ${cost} P / 보유: ${player.skillPoints} P)`, "fail");
+      return;
+		}
+
     const skill = allSkills.find((s) => s.key === key)!;
-    const currentLevel = (player.skillUpgradeLevels || {})[key] || 0;
     const newLevel = currentLevel + 1;
 
     const updatedSkills = player.skills.includes(key)
@@ -421,7 +435,7 @@ export const useGameEngine = () => {
 
     const updated = {
       ...player,
-      skillPoints: (player.skillPoints || 0) - 1,
+      skillPoints: (player.skillPoints || 0) - cost, // 계산된 비용만큼 차감
       skills: updatedSkills,
       skillUpgradeLevels: {
         ...(player.skillUpgradeLevels || {}),
@@ -434,7 +448,7 @@ export const useGameEngine = () => {
       addLog(`📘 "${skill.name}" 스킬을 배웠다! (Lv.${newLevel}/5)`, "normal");
     } else {
       addLog(
-        `📘 "${skill.name}" 스킬을 더 배웠다! (Lv.${newLevel}/5)`,
+        `📘 "${skill.name}" 스킬 강화에 성공했습니다! (Lv.${newLevel}/5)`,
         "normal"
       );
     }
