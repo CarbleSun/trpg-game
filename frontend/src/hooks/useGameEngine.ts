@@ -1141,7 +1141,13 @@ export const useGameEngine = () => {
       logs.push({ msg: `☠️ 보스 전투에서 패배했다...`, type: "def" });
       playerAfterBattle.defCount += 1;
       playerAfterBattle.exp = Math.floor(playerAfterBattle.exp * 0.7);
+
+			// 패배 시 완전 회복 및 상태 초기화
       playerAfterBattle.hp = playerAfterBattle.maxHp;
+			playerAfterBattle.activeBuffs = [];				// 버프 초기화
+			playerAfterBattle.skillCooldowns = {};		// 쿨타임 초기화
+			playerAfterBattle.isDefending = false;		// 방어 태세 해제
+
       logs.push({
         msg: `😥 잠시 쉬고 일어나 체력을 모두 회복했다.`,
         type: "normal",
@@ -1163,6 +1169,15 @@ export const useGameEngine = () => {
       setShowBattleChoice(false);
       setGameState("dungeon");
       setCurrentBossDungeonId(null);
+
+			// 승리해서 돌아올 때도 상태 초기화 (쿨타임, 버프 제거)
+      setPlayer({
+        ...playerAfterBattle, // 이미 보상/레벨업이 반영된 플레이어 상태
+        activeBuffs: [],      // 버프 제거
+        skillCooldowns: {},   // 쿨타임 제거
+        isDefending: false,
+      });
+
     } else if (type !== "victory") {
       // 패배 || 도망 -> 홈으로 복귀
       setShowBattleChoice(false);
@@ -1301,7 +1316,13 @@ export const useGameEngine = () => {
       logs.push({ msg: `☠️ 전투에서 패배했다...`, type: "def" });
       playerAfterBattle.defCount += 1;
       playerAfterBattle.exp = Math.floor(playerAfterBattle.exp * 0.7);
+
+			// 패배 시 완전 회복 및 상태 초기화
       playerAfterBattle.hp = playerAfterBattle.maxHp;
+			playerAfterBattle.activeBuffs = [];     // 버프 초기화
+      playerAfterBattle.skillCooldowns = {};  // 쿨타임 초기화
+      playerAfterBattle.isDefending = false;  // 방어 태세 해제
+
       logs.push({
         msg: `😥 잠시 쉬고 일어나 체력을 모두 회복했다.`,
         type: "normal",
@@ -1335,11 +1356,23 @@ export const useGameEngine = () => {
   };
 
   const handleExitDungeon = () => {
+		// 플레이어 정보가 없으면 중단
+		if (!player) return;
+
     setShowBattleChoice(false);
     setGameState("dungeon"); // 던전 선택 화면으로
     setCurrentDungeonId(null);
     setCurrentBossDungeonId(null);
-    addLog("던전에서 퇴장했습니다.", "normal");
+
+		// 던전 사냥 종료 시 상태 초기화
+		setPlayer({
+			...player,
+			activeBuffs: [],			// 버프/디버프 모두 제거
+			skillCooldowns: {},		// 스킬 쿨타임 초기화
+			isDefending: false,		// 방어 태세 초기화
+		});
+
+    addLog("던전에서 퇴장합니다.", "normal");
   };
 
   // 게임 시작

@@ -95,13 +95,23 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
           <div className="mr-2 min-w-[30px] text-red-600">ATK</div>
           <div className="text-gray-700">
 						{totalAtk} ( {player.atk} 
-						+ <span className="text-red-500">{weaponAtk}</span>
-						{weaponEnh > 0 && <> + <span className="text-rose-600">{weaponEnh}</span></>}
+						{' + '} 
+						<span className="text-red-500"> {weaponAtk}</span>
+						{weaponEnh > 0 && (
+							<> 
+								{' + '} 
+								<span className="text-rose-600">{weaponEnh}</span>
+							</>
+						)}
+
 						{/* 버프 수치 표시 (0이 아닌 경우에만) */}
 						{buffAtk !== 0 && (
-							<> + <span className='text-purple-600 font-bold'>Buff {buffAtk}</span></>
+							<> 
+								{' + '} 
+								<span className='text-purple-600 font-bold'>Buff {buffAtk}</span>
+							</>
 						)}
-						)
+						{' ) '}
 					</div>
         </div>
 
@@ -109,17 +119,29 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
         <div className="flex">
           <div className="mr-2 min-w-[30px] text-blue-600">DEF</div>
           <div className="text-gray-700">
-						{totalDef} ( {player.def} 
-						+ <span className="text-blue-500">{armorDef}</span>
-						{armorEnh > 0 && <> + <span className="text-sky-700">{armorEnh}</span></>}
+						{totalDef} ( {player.def}
+						{' + '}
+						<span className="text-blue-500">{armorDef}</span>
+						{armorEnh > 0 && ( 
+							<>
+								{' + '}
+								<span className="text-sky-700">{armorEnh}</span>
+							</>
+						)}
 
 						{/* 방어력 감소 시 마이너스로 표시, 증가 시 플러스로 표시 */}
 						{buffDef > 0 ? (
-							<> - <span className='text-purple-600 font-bold'>Buff {buffDef}</span></>
+							<>
+								{' - '}
+								<span className='text-purple-600 font-bold'>Buff {buffDef}</span>
+							</>
 						) : buffDef < 0 ? (
-							<> + <span className='text-purple-600 font-bold'>Buff {buffDef}</span></>
+							<> 
+								{' + '} 
+								<span className='text-purple-600 font-bold'>Buff {buffDef}</span>
+							</>
 						) : null}
-						)
+						{' ) '}
 					</div>
         </div>
 
