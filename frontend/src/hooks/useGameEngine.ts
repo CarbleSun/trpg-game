@@ -42,6 +42,7 @@ import { applyPetStartOfTurn } from "../game/petLogic";
 export const useGameEngine = () => {
   const [player, setPlayer] = useState<PlayerStats | null>(null);
   const [monster, setMonster] = useState<CharacterStats | null>(null);
+	const [dungeonSessionKills, setDungeonSessionKills] = useState(0); // 던전 연속 사냥 횟수 카운트
   const [boss, setBoss] = useState<BossStats | null>(null); // 보스 상태
   const [logMessages, setLogMessages] = useState<LogMessage[]>([]);
   const [gameState, setGameState] = useState<GameState>("setup");
@@ -1243,7 +1244,6 @@ export const useGameEngine = () => {
     setRecoveryCharges(5);
     let playerAfterBattle = { ...updatedPlayer };
     const logs: Omit<LogMessage, "id">[] = [];
-
 		let didDropItem = false;
 
     if (type === "victory" && targetMonster) {
@@ -1255,6 +1255,9 @@ export const useGameEngine = () => {
 
 			// 일반 몬스터 아이템 드롭
 			const DROP_CHANCE = 5; 
+
+			// 승리 시 세션 킬 카운트 추가(state 업데이트)
+			setDungeonSessionKills((prev) => prev + 1);
       
       if (getRandom(1, 100) <= DROP_CHANCE && normalDropPool.length > 0) {
         didDropItem = true;
@@ -1337,14 +1340,27 @@ export const useGameEngine = () => {
     setIsProcessing(false);
     setIsPlayerTurn(true);
 
-    // 승리 시에만 계속/나가기 선택 표시, 패배/도망 시에는 던전으로 복귀
+    // 승리 시 10회마다 선택지 표시, 그 외엔 자동 진행, 패배/도망 시에는 던전으로 복귀
     if (type === "victory") {
 			// 아이템이 드롭되지 않았을 때만 '계속 싸우기' 버튼을 보여줌.
 			if (!didDropItem) {
-				setShowBattleChoice(true);
+				// 현재 카운트 + 1이 10의 배수인지 확인
+				if ((dungeonSessionKills + 1) % 10 === 0) {
+					setShowBattleChoice(true);
+					addLog(`🛑 10회 사냥 달성! 정비를 위해 잠시 멈춥니다.`, "normal");
+				} else {
+					// 10회가 아니면 자동 진행
+          addLog(`⏩ 계속 나아가는 중... (${dungeonSessionKills + 1}/10)`, "normal");
+
+					// 약간의 딜레이 후 다음 던전 실행 (로그 읽을 시간 확보)
+          setTimeout(() => {
+            handleNextDungeon(); 
+          }, 800);
+				}
 			}
 			// 아이템이 드롭되었다면 모달이 떠 있으므로 버튼을 숨김
     } else {
+			// 패배하거나 도망친 경우 -> 던전 선택 화면으로
       setGameState("dungeon");
       setCurrentDungeonId(null);
     }
@@ -1363,6 +1379,9 @@ export const useGameEngine = () => {
     setGameState("dungeon"); // 던전 선택 화면으로
     setCurrentDungeonId(null);
     setCurrentBossDungeonId(null);
+
+		// 퇴장 시 카운트 초기화
+		setDungeonSessionKills(0);
 
 		// 던전 사냥 종료 시 상태 초기화
 		setPlayer({
@@ -1385,7 +1404,7 @@ export const useGameEngine = () => {
 
   // 던전 선택 및 액션
   const handleSelectDungeon = (dungeonId: string) => {
-    const dungeon = dungeons.find((d) => d.id === dungeonId); // ⚠️ 누락된 변수 정의
+    const dungeon = dungeons.find((d) => d.id === dungeonId);
     if (!player || !dungeon) return;
     if (player.level < dungeon.requiredLevel) {
       addLog(
@@ -1396,12 +1415,16 @@ export const useGameEngine = () => {
     }
     setCurrentDungeonId(dungeonId);
     setGameState("dungeon");
+
+		// 입장 시 사냥 카운트 초기화
+		setDungeonSessionKills(0);
+
     addLog(`--- ${dungeon.icon} ${dungeon.name} ---`, "normal");
     handleNextDungeon(dungeon);
   };
 
   const handleSelectBossDungeon = (bossDungeonId: string) => {
-    const bossDungeon = bossDungeons.find((b) => b.id === bossDungeonId); // ⚠️ 누락된 변수 정의
+    const bossDungeon = bossDungeons.find((b) => b.id === bossDungeonId);
     if (!player || !bossDungeon) return;
     const cooldown = bossCooldowns[bossDungeonId] || 0;
     if (cooldown > Date.now()) {
