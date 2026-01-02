@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { PlayerStats } from '../game/types';
-// import { skills } from '../game/constants';
+import { skills as allSkills } from '../game/constants'; // 스킬 정보 로드
 import ProgressBar from './ProgressBar';
 
 interface StatusDisplayProps {
@@ -8,6 +8,9 @@ interface StatusDisplayProps {
 }
 
 const StatusDisplay = ({ player }: StatusDisplayProps) => {
+	// 모달 상태 관리
+	const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
+
 	// 유효 스탯 계산
   const weaponAtk = player.weapon?.value || 0;
   const armorDef = player.armor?.value || 0;
@@ -54,6 +57,11 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
 		return { buffAtk: bAtk, buffDef: bDef, totalAtk: finalAtk, totalDef: finalDef };
 	}, [player, weaponAtk, weaponEnh, armorDef, armorEnh]);
 
+	// 보유 스킬 목록 필터링
+	const learnedSkills = useMemo(() => {
+		return allSkills.filter(s => (player.skills || []).includes(s.key));
+	}, [player.skills]);
+
   // style.css의 .status, .info, .info-basic 등 변환
   return (
     <div className="mt-10 flex flex-wrap border-b border-gray-300 pb-6 font-stat text-gray-800 md:flex-nowrap">
@@ -63,9 +71,17 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
         <div className="text-xl font-bold">{player.name}</div>
         <div className="my-1">{player.job}</div>
         <div>{player.money} Gold</div>
+
+				{/* 스킬 확인 버튼 */}
+				<button 
+					onClick={() => setIsSkillModalOpen(true)}
+					className='mt-3 rounded bg-indigo-100 px-2 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-200 transition-colors'
+				>
+					📜 스킬 확인
+				</button>
       </div>
 
-      {/* 레벨/경험치  */}
+      {/* 레벨 / 경험치 */}
       <div className="w-full grow p-4 md:w-auto md:flex-basis-1/4">
         <div className="flex items-end">
           <strong className="mr-3">LEVEL</strong>
@@ -175,8 +191,52 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
         </div>
       </div>
 
-      {/* 펫 표시는 상단 UI에서 숨김 */}
+      {/* 스킬 목록 모달 */}
+      {isSkillModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl animate-fade-in-up">
+            <div className="mb-4 flex items-center justify-between border-b pb-2">
+              <h3 className="text-lg font-bold text-gray-800">📘 보유 스킬 목록</h3>
+              <button onClick={() => setIsSkillModalOpen(false)} className="text-gray-500 hover:text-black">✖️</button>
+            </div>
+            
+            <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
+              {learnedSkills.length > 0 ? (
+                learnedSkills.map((skill) => {
+                  const level = (player.skillUpgradeLevels || {})[skill.key] || 0;
+                  return (
+                    <div key={skill.key} className="rounded border bg-gray-50 p-3">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-indigo-700">{skill.name}</span>
+                        <span className="text-xs font-bold bg-white border border-gray-200 px-2 py-0.5 rounded text-gray-600">
+                          Lv.{level}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs text-gray-600 leading-relaxed">
+                        {skill.description}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="py-8 text-center text-gray-500">
+                  아직 배운 스킬이 없습니다.<br/>
+                  <span className="text-xs">레벨업 후 스킬 포인트를 사용해보세요!</span>
+                </div>
+              )}
+            </div>
 
+            <div className="mt-4 text-right">
+              <button
+                onClick={() => setIsSkillModalOpen(false)}
+                className="rounded bg-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-300 transition-colors"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
