@@ -2272,19 +2272,26 @@ export const useGameEngine = () => {
     }
 
     addLogs(logs);
-    setPlayer(updatedPlayer);
-    setBossReward(null);
 
 		if(currentBossDungeonId) {
 			// 보스 던전일 경우 : 전투 종료 후 홈으로 복귀
 			setShowBattleChoice(false);
     	setGameState("dungeon");
     	setCurrentBossDungeonId(null); // 보스 던전 ID 초기화하여 홈으로 복귀
+
+			// 쿨타임과 버프 초기화
+			updatedPlayer.activeBuffs = [];
+			updatedPlayer.skillCooldowns = {};
+			updatedPlayer.isDefending = false;
 		} else {
 			// 일반 던전일 경우 : 다시 전투 화면(선택지)으로 복귀
 			setGameState("battle");
 			setShowBattleChoice(true);
 		}
+
+		// 플레이어 상태 (아이템 획득 + 초기화 적용)를 저장
+		setPlayer(updatedPlayer);
+    setBossReward(null);
   };
 
   const handleKeyDown = (key: string) => {

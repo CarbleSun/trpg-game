@@ -164,13 +164,13 @@ const StatusDisplay = ({ player }: StatusDisplayProps) => {
       </div>
 
       {/* 승/패 */}
-      <div className="w-1/2 grow p-4 text-sm md:w-auto">
-        <div className="flex justify-end">
-          <div className="mr-2 min-w-[30px]">승리</div>
+      <div className="w-full grow p-4 text-sm md:w-auto">
+        <div className="flex">
+          <div className="mr-2 min-w-[30px text-indigo-600 font-bold">승리</div>
           <div className="text-gray-700">{player.vicCount}회</div>
         </div>
-        <div className="flex justify-end">
-          <div className="mr-2 min-w-[30px]">패배</div>
+        <div className="flex">
+          <div className="mr-2 min-w-[30px] text-red-500 font-bold">패배</div>
           <div className="text-gray-700">{player.defCount}회</div>
         </div>
       </div>
