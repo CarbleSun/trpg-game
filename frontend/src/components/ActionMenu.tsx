@@ -1,6 +1,8 @@
 import type { GameState, SkillKey, Skill } from "../game/types";
 
 interface ActionMenuProps {
+  isOpen: boolean;
+  onClose: () => void;
   gameState: GameState;
   isPlayerTurn: boolean;
   isProcessing: boolean;
@@ -36,24 +38,29 @@ const ActionButton = ({
   children,
   hotkey,
   className = "",
+  variant = "default",
 }: {
   onClick: () => void;
   disabled: boolean;
   children: React.ReactNode;
   hotkey: string;
   className?: string;
+  variant?: "default" | "primary" | "danger";
 }) => {
+  const baseStyle = "relative flex flex-col items-center justify-center rounded-xl border font-bold shadow-sm transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none disabled:grayscale p-1 leading-tight aspect-square";
+  
+  let colorStyle = "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 hover:shadow-md";
+  if (variant === "primary") {
+    colorStyle = "border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-200 hover:shadow-md";
+  } else if (variant === "danger") {
+    colorStyle = "border-red-500 bg-white text-red-600 hover:bg-red-50 hover:border-red-600";
+  }
+
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`relative m-1 rounded border border-gray-700 px-4 py-2 font-stat text-sm text-gray-800 outline-none
-                 transition-colors duration-200 hover:border-blue-700 hover:bg-blue-700 hover:text-white
-                 disabled:pointer-events-none disabled:opacity-50 ${className}`}
-    >
-      {children}
+    <button onClick={onClick} disabled={disabled} className={`${baseStyle} ${colorStyle} ${className}`}>
+      <span className="z-10 flex flex-col items-center gap-1 text-center">{children}</span>
       {hotkey && (
-        <span className="absolute -top-2 -right-1 rounded bg-gray-700 px-1.5 py-0.5 text-xs font-bold text-white opacity-70">
+        <span className={`absolute top-1 right-1.5 opacity-70 font-mono ${variant === 'primary' ? 'text-indigo-200' : 'text-gray-400'} text-[10px]`}>
           {hotkey}
         </span>
       )}
@@ -62,6 +69,8 @@ const ActionButton = ({
 };
 
 const ActionMenu = ({
+  isOpen,
+  onClose,
   gameState,
   isPlayerTurn,
   isProcessing,
@@ -92,191 +101,145 @@ const ActionMenu = ({
   const isBattle = gameState === "battle";
   const canAct = !isProcessing && (isBattle ? isPlayerTurn : true);
 
-  return (
-    <div className="relative flex h-14 justify-center my-10">
-      {/* 던전 메뉴 */}
-      {gameState === "dungeon" && (
-        <div className="flex justify-center">
-          <ActionButton
-            onClick={onOpenDungeonSelect}
-            disabled={isProcessing}
-            hotkey="S"
-          >
-            던전 탐험
-          </ActionButton>
-          <ActionButton
-            onClick={onOpenBossSelect}
-            disabled={isProcessing}
-            hotkey="B"
-          >
-            보스 던전
-          </ActionButton>
-          <ActionButton
-            onClick={onDungeonRecover}
-            disabled={isProcessing}
-            hotkey="R"
-          >
-            휴식
-          </ActionButton>
-          <ActionButton
-            onClick={onEnterShop}
-            disabled={isProcessing}
-            hotkey="H"
-          >
-            상점
-          </ActionButton>
-          <ActionButton
-            onClick={onOpenSkills}
-            disabled={isProcessing}
-            hotkey="K"
-          >
-            스킬
-          </ActionButton>
-          <ActionButton
-            onClick={onOpenWeaponEnhance}
-            disabled={isProcessing}
-            hotkey="W"
-          >
-            강화소
-          </ActionButton>
-          <ActionButton
-            onClick={onOpenScarecrow}
-            disabled={isProcessing}
-            hotkey="T"
-          >
-            허수아비
-          </ActionButton>
-        </div>
-      )}
-
-      {/* 전투 메뉴 */}
-      {gameState === "battle" && (
-        <div className="flex flex-wrap justify-center items-end">
-          {showBattleChoice ? (
-            <>
-              <ActionButton
-                onClick={onContinueBattle}
-                disabled={isProcessing}
-                hotkey="C"
-              >
-                계속 싸우기
-              </ActionButton>
-              <ActionButton
-                onClick={onExitDungeon}
-                disabled={isProcessing}
-                hotkey="X"
-              >
-                던전 나가기
-              </ActionButton>
-            </>
-          ) : (
-            <>
-              {/* 스킬 목록 팝업 */}
+  // ============================================================
+  // [전투 모드] : 하단 가로형, 항상 보임
+  // ============================================================
+  if (isBattle) {
+    return (
+      <div className="fixed bottom-4 left-0 right-0 z-50 flex justify-center gap-2 pointer-events-auto animate-slide-up">
+        {showBattleChoice ? (
+          <>
+            <ActionButton onClick={onContinueBattle} disabled={isProcessing} hotkey="C" variant="primary" className="w-16 h-16 text-xs">
+              계속<br/>싸우기
+            </ActionButton>
+            <ActionButton onClick={onExitDungeon} disabled={isProcessing} hotkey="X" variant="danger" className="w-16 h-16 text-xs">
+              던전<br/>나가기
+            </ActionButton>
+          </>
+        ) : (
+          <>
+            <ActionButton onClick={onAttack} disabled={!canAct} hotkey="A" variant="primary" className="w-16 h-16 text-xs">
+              ⚔️<br/>공격
+            </ActionButton>
+            
+            <div className="relative">
               {isBattleSkillOpen && (
-                <div className="absolute bottom-full mb-4 flex flex-col gap-1 rounded-lg border border-gray-400 bg-white p-3 shadow-lg z-10 min-w-60">
-                  <div className="mb-2 text-center font-bold text-gray-700 border-b pb-1">
-                    스킬 목록
-                  </div>
-                  {learnedSkills.length === 0 ? (
-                    <div className="text-center text-gray-500 text-xs py-2">
-                      배운 스킬이 없습니다.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                      {learnedSkills.map((key, index) => {
+                <div className="absolute bottom-full left-0 mb-3 w-48 max-h-[300px] overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-xl p-2 custom-scrollbar z-60 animate-fade-in-up">
+                    <div className="text-[11px] font-bold text-gray-400 mb-2 px-1 border-b pb-1">SKILL LIST</div>
+                    <div className="flex flex-col gap-1">
+                    {learnedSkills.length === 0 ? (
+                      <div className="text-center text-[10px] text-gray-400 py-2">없음</div>
+                    ) : (
+                      learnedSkills.map((key, index) => {
                         const skill = skills.find((s) => s.key === key);
-                        const cd =
-                          (
-                            skillCooldowns as Record<
-                              SkillKey,
-                              number | undefined
-                            >
-                          )[key] || 0;
+                        const cd = (skillCooldowns as Record<SkillKey, number | undefined>)[key] || 0;
                         const disabled = !canAct || cd > 0;
-                        
-                        // 필터링 없이 원래 인덱스를 그대로 사용하여 키 매핑을 일치시킴
                         const hotkey = index < 9 ? `${index + 1}` : "";
-
-                        // 스킬 데이터가 없으면 버튼을 그리지 않음 (단, 인덱스는 건너뛰어짐)
                         if (!skill) return null;
-
                         return (
                           <button
                             key={key}
-                            onClick={() => {
-                              onUseSkill(key);
-                              onToggleBattleSkills();
-                            }}
+                            onClick={() => { onUseSkill(key); onToggleBattleSkills(); }}
                             disabled={disabled}
-                            className="relative flex items-center justify-between rounded border border-gray-300 px-3 py-2 text-left text-sm hover:bg-blue-50 disabled:opacity-50 disabled:hover:bg-white transition-colors"
+                            className="w-full text-left px-2 py-2 bg-gray-50 hover:bg-indigo-50 border border-gray-100 rounded-lg text-xs font-bold transition-colors flex justify-between items-center group"
                           >
-                            <span
-                              className={`truncate mr-2 ${
-                                disabled ? "text-gray-400" : "text-gray-800"
-                              }`}
-                            >
-                              {skill.name}
-                            </span>
+                            <span className="group-hover:text-indigo-700 transition-colors">{skill.name}</span>
                             {cd > 0 ? (
-                              <span className="text-xs text-red-500 font-bold shrink-0">
-                                ({cd})
-                              </span>
+                              <span className="text-red-500 text-[9px]">{cd}턴</span>
                             ) : (
-                              hotkey && (
-                                <span className="shrink-0 rounded bg-gray-200 px-1 text-[10px] font-bold text-gray-600">
-                                  {hotkey}
-                                </span>
-                              )
+                              hotkey && <span className="text-gray-400 text-[8px] bg-white border px-1 rounded">[{hotkey}]</span>
                             )}
                           </button>
                         );
-                      })}
+                      })
+                    )}
                     </div>
-                  )}
                 </div>
               )}
-
-              <ActionButton onClick={onAttack} disabled={!canAct} hotkey="A">
-                공격
-              </ActionButton>
-
               <ActionButton
                 onClick={onToggleBattleSkills}
                 disabled={!canAct}
                 hotkey="K"
-                className={
-                  isBattleSkillOpen
-                    ? "border-blue-700 bg-blue-100 text-blue-900"
-                    : ""
-                }
+                className={`w-16 h-16 text-xs ${isBattleSkillOpen ? "bg-indigo-100 border-indigo-300 text-indigo-800" : ""}`}
               >
-                스킬
+                ⚡<br/>스킬
               </ActionButton>
+            </div>
 
-              <ActionButton onClick={onDefend} disabled={!canAct} hotkey="D">
-                방어
-              </ActionButton>
-              <ActionButton onClick={onRecover} disabled={!canAct} hotkey="E">
-                회복 ({recoveryCharges})
-              </ActionButton>
+            <ActionButton onClick={onDefend} disabled={!canAct} hotkey="D" className="w-16 h-16 text-xs">
+              🛡️<br/>방어
+            </ActionButton>
+            <ActionButton onClick={onRecover} disabled={!canAct} hotkey="E" className="w-16 h-16 text-xs">
+              ❤️<br/>회복
+              <span className="text-[9px] font-normal text-gray-500 mt-0.5">({recoveryCharges})</span>
+            </ActionButton>
 
-              {isScarecrowBattle && onExitScarecrowBattle ? (
-                <ActionButton
-                  onClick={onExitScarecrowBattle}
-                  disabled={isProcessing}
-                  hotkey="Q"
-                >
-                  나가기
-                </ActionButton>
-              ) : (
-                <ActionButton onClick={onEscape} disabled={!canAct} hotkey="Q">
-                  도망
-                </ActionButton>
-              )}
-            </>
-          )}
-        </div>
-      )}
+            <div className="w-px bg-gray-300 mx-1 h-10 self-center opacity-50"></div>
+
+            {isScarecrowBattle && onExitScarecrowBattle ? (
+              <ActionButton onClick={onExitScarecrowBattle} disabled={isProcessing} hotkey="Q" className="w-16 h-16 text-xs text-gray-500">
+                나가기
+              </ActionButton>
+            ) : (
+              <ActionButton onClick={onEscape} disabled={!canAct} hotkey="Q" className="w-16 h-16 text-xs text-gray-500 hover:text-red-600 hover:bg-red-50">
+                🏳️<br/>도망
+              </ActionButton>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // ============================================================
+  // [비전투 모드 (홈/던전)] : 우측 세로형, ESC 토글
+  // ============================================================
+  return (
+    <div 
+      className={`fixed top-1/2 right-6 -translate-y-1/2 z-50 flex flex-col items-end gap-2 transition-all duration-300 ease-in-out ${
+        isOpen 
+          ? "opacity-100 translate-x-0 pointer-events-auto" 
+          : "opacity-0 translate-x-8 pointer-events-none"
+      }`}
+    >
+      
+      {/* 닫기 버튼 */}
+      <button 
+        onClick={onClose} 
+        className="mb-1 mr-1 bg-gray-800 text-white text-[10px] font-bold rounded-full px-3 py-1.5 shadow hover:bg-gray-700 transition-colors opacity-80 hover:opacity-100"
+      >
+        닫기 (ESC)
+      </button>
+
+      {/* 메뉴 컨테이너 */}
+      <div className="bg-white/90 backdrop-blur-md border border-gray-200 p-2 rounded-2xl shadow-2xl flex flex-col gap-2">
+        {gameState === "dungeon" && (
+          <>
+            <ActionButton onClick={onOpenDungeonSelect} disabled={isProcessing} hotkey="S" variant="primary" className="w-16 h-16 text-xs">
+              ⚔️<br/>던전
+            </ActionButton>
+            <ActionButton onClick={onOpenBossSelect} disabled={isProcessing} hotkey="B" className="w-16 h-16 text-xs border-red-200 text-red-800 bg-red-50 hover:bg-red-100">
+              👹<br/>보스
+            </ActionButton>
+            <div className="h-px bg-gray-300 w-full opacity-50 my-0.5"></div>
+            <ActionButton onClick={onDungeonRecover} disabled={isProcessing} hotkey="R" className="w-16 h-16 text-xs">
+              💤<br/>휴식
+            </ActionButton>
+            <ActionButton onClick={onEnterShop} disabled={isProcessing} hotkey="H" className="w-16 h-16 text-xs">
+              💰<br/>상점
+            </ActionButton>
+            <ActionButton onClick={onOpenWeaponEnhance} disabled={isProcessing} hotkey="W" className="w-16 h-16 text-xs">
+              ⚒️<br/>강화
+            </ActionButton>
+            <ActionButton onClick={onOpenSkills} disabled={isProcessing} hotkey="K" className="w-16 h-16 text-xs">
+              📘<br/>스킬
+            </ActionButton>
+            <ActionButton onClick={onOpenScarecrow} disabled={isProcessing} hotkey="T" className="w-16 h-16 text-xs">
+              🎯<br/>훈련
+            </ActionButton>
+          </>
+        )}
+      </div>
     </div>
   );
 };

@@ -8,17 +8,17 @@ interface GameLogProps {
 // style.css의 .msg-*** 클래스들을 Tailwind 클래스로 매핑
 const getLogTypeClass = (type: LogType): string => {
   switch (type) {
-    case 'atk': return 'text-red-700';
-    case 'cri': return 'text-red-600 font-bold';
-    case 'vic': return 'text-blue-800 font-bold';
-    case 'def': return 'text-gray-900 font-bold';
-    case 'lvup': return 'bg-yellow-100 p-1 rounded';
-    case 'fail': return 'text-gray-500';
-    case 'appear': return 'font-bold text-lg underline';
-    case 'gainExp': return 'text-green-600';
-    case 'gainMoney': return 'text-yellow-600';
+    case 'atk': return 'text-red-600';
+    case 'cri': return 'text-red-700 font-extrabold text-[1.05em]';
+    case 'vic': return 'text-blue-700 font-bold bg-blue-50 px-2 rounded -mx-2';
+    case 'def': return 'text-gray-800 font-bold';
+    case 'lvup': return 'text-yellow-700 font-bold bg-yellow-50 px-2 rounded -mx-2 border border-yellow-200';
+    case 'fail': return 'text-gray-400 italic';
+    case 'appear': return 'font-bold text-gray-900 border-b-2 border-gray-200 pb-1 mb-2 mt-2 block';
+    case 'gainExp': return 'text-emerald-600 font-medium';
+    case 'gainMoney': return 'text-amber-600 font-medium';
     case 'tryToAtk': return 'text-red-400';
-    default: return 'text-gray-800';
+    default: return 'text-gray-600';
   }
 };
 
@@ -85,7 +85,7 @@ const GameLog = ({ messages }: GameLogProps) => {
   return (
     <div
       id="log"
-      className="mt-10 h-[300px] min-h-[200px] overflow-y-scroll border border-gray-400
+      className="mt-10 h-[250px] min-h-[200px] overflow-y-scroll border border-gray-400
                  bg-white p-5 font-log text-sm"
       ref={containerRef}
       onScroll={handleScroll}
