@@ -45,7 +45,7 @@ const ActionButton = ({
   children: React.ReactNode;
   hotkey: string;
   className?: string;
-  variant?: "default" | "primary" | "danger";
+  variant?: "default" | "primary" | "danger" | "blue";
 }) => {
   const baseStyle = "relative flex flex-col items-center justify-center rounded-xl border font-bold shadow-sm transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none disabled:grayscale p-1 leading-tight aspect-square";
   
@@ -54,6 +54,8 @@ const ActionButton = ({
     colorStyle = "border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-200 hover:shadow-md";
   } else if (variant === "danger") {
     colorStyle = "border-red-500 bg-white text-red-600 hover:bg-red-50 hover:border-red-600";
+  } else if (variant === "blue") {
+    colorStyle = "border-blue-500 bg-white text-blue-800 hover:bg-blue-100 hover:border-blue-300";
   }
 
   return (
@@ -118,7 +120,7 @@ const ActionMenu = ({
           </>
         ) : (
           <>
-            <ActionButton onClick={onAttack} disabled={!canAct} hotkey="A" variant="primary" className="w-16 h-16 text-xs">
+            <ActionButton onClick={onAttack} disabled={!canAct} hotkey="A" className="w-16 h-16 text-xs">
               ⚔️<br/>공격
             </ActionButton>
             
@@ -215,7 +217,7 @@ const ActionMenu = ({
       <div className="bg-white/90 backdrop-blur-md border border-gray-200 p-2 rounded-2xl shadow-2xl flex flex-col gap-2">
         {gameState === "dungeon" && (
           <>
-            <ActionButton onClick={onOpenDungeonSelect} disabled={isProcessing} hotkey="S" variant="primary" className="w-16 h-16 text-xs">
+            <ActionButton onClick={onOpenDungeonSelect} disabled={isProcessing} hotkey="S" variant="blue" className="w-16 h-16 text-xs">
               ⚔️<br/>던전
             </ActionButton>
             <ActionButton onClick={onOpenBossSelect} disabled={isProcessing} hotkey="B" className="w-16 h-16 text-xs border-red-200 text-red-800 bg-red-50 hover:bg-red-100">
