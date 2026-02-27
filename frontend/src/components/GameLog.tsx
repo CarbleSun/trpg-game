@@ -3,9 +3,9 @@ import type { LogMessage, LogType } from '../game/types';
 
 interface GameLogProps {
   messages: LogMessage[];
+  isBattle?: boolean;
 }
 
-// style.css의 .msg-*** 클래스들을 Tailwind 클래스로 매핑
 const getLogTypeClass = (type: LogType): string => {
   switch (type) {
     case 'atk': return 'text-red-600';
@@ -22,19 +22,28 @@ const getLogTypeClass = (type: LogType): string => {
   }
 };
 
-const GameLog = ({ messages }: GameLogProps) => {
+const getJrpgColorClass = (type: LogType): string => {
+  switch (type) {
+    case 'lvup': case 'vic': case 'gainExp': case 'gainMoney': return 'text-emerald-400 font-bold drop-shadow-[0_0_3px_rgba(52,211,153,0.5)]';
+    case 'cri': return 'text-yellow-400 font-black animate-pulse drop-shadow-[0_0_5px_rgba(250,204,21,0.6)]';
+    case 'atk': case 'tryToAtk': return 'text-indigo-300';
+    case 'appear': return 'text-rose-400 font-bold border-b border-rose-500/30 pb-1 mb-2 mt-2 block';
+    case 'fail': return 'text-slate-500';
+    default: return 'text-slate-200';
+  }
+};
+
+const GameLog = ({ messages, isBattle = false }: GameLogProps) => {
   const logEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const prevMessageIdsRef = useRef<Set<number>>(new Set());
   const isRestoringScrollRef = useRef<boolean>(false);
 
-  // 마운트 시 이전 스크롤 위치 복원
   useEffect(() => {
     const saved = sessionStorage.getItem('gameLogScrollTop');
     if (saved && containerRef.current) {
       isRestoringScrollRef.current = true;
       const savedScrollTop = parseInt(saved, 10) || 0;
-      // DOM 업데이트 후 스크롤 위치 복원
       setTimeout(() => {
         if (containerRef.current) {
           containerRef.current.scrollTop = savedScrollTop;
@@ -42,11 +51,9 @@ const GameLog = ({ messages }: GameLogProps) => {
         }
       }, 0);
     }
-    // 현재 메시지 ID들을 저장
     prevMessageIdsRef.current = new Set(messages.map(msg => msg.id));
   }, []);
 
-  // 언마운트 전 스크롤 위치 저장 (화면 전환 시)
   useEffect(() => {
     return () => {
       if (containerRef.current) {
@@ -55,50 +62,70 @@ const GameLog = ({ messages }: GameLogProps) => {
     };
   }, []);
 
-  // 새 메시지가 추가되면 항상 맨 밑으로 스크롤 (스크롤 복원 중이 아닐 때만)
   useEffect(() => {
     if (isRestoringScrollRef.current) return;
-    
     const currentMessageIds = new Set(messages.map(msg => msg.id));
     const hasNewMessages = messages.some(msg => !prevMessageIdsRef.current.has(msg.id));
     
     if (hasNewMessages) {
-      // 새 메시지가 있으면 항상 맨 밑으로
       setTimeout(() => {
-        logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (containerRef.current) {
+          containerRef.current.scrollTo({
+            top: containerRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
       }, 0);
     }
-    
     prevMessageIdsRef.current = currentMessageIds;
   }, [messages]);
 
   const handleScroll = () => {
     const el = containerRef.current;
-    if (!el) return;
-    // 스크롤 복원 중이 아닐 때만 저장
-    if (!isRestoringScrollRef.current) {
-      sessionStorage.setItem('gameLogScrollTop', String(el.scrollTop));
-    }
+    if (!el || isRestoringScrollRef.current) return;
+    sessionStorage.setItem('gameLogScrollTop', String(el.scrollTop));
   };
 
-  // style.css의 #log
+  const containerClassName = isBattle
+    ? "h-full w-full overflow-y-scroll p-4 bg-transparent text-sm scrollbar-hide"
+    : "mt-10 h-[250px] min-h-[200px] overflow-y-scroll border border-gray-400 bg-white p-5 text-sm";
+
+  // 🌟 외부 폰트 없이 운영체제 내장 모던 폰트(애플 산돌고딕, 맑은 고딕 등)를 최우선으로 적용하는 스타일
+  const modernSystemFontStyle = isBattle ? {
+    fontFamily: 'system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", sans-serif',
+    lineHeight: '1.7',
+    letterSpacing: '-0.02em',
+    fontWeight: '500'
+  } : {};
+
   return (
     <div
-      id="log"
-      className="mt-10 h-[250px] min-h-[200px] overflow-y-scroll border border-gray-400
-                 bg-white p-5 font-log text-sm"
+      id={isBattle ? "log-battle" : "log"}
+      className={containerClassName}
       ref={containerRef}
       onScroll={handleScroll}
+      style={isBattle ? { ...modernSystemFontStyle, msOverflowStyle: 'none', scrollbarWidth: 'none' } : {}}
     >
+      {isBattle && (
+        <style>{`
+          #log-battle::-webkit-scrollbar { display: none; }
+        `}</style>
+      )}
+      
       {messages.map((msg) => (
         <p
           key={msg.id}
-          className={`leading-relaxed animate-msgShow ${getLogTypeClass(msg.type)}`}
+          className={`animate-msgShow flex items-start ${
+            isBattle ? getJrpgColorClass(msg.type) : getLogTypeClass(msg.type)
+          }`}
+          style={{ marginBottom: isBattle ? '6px' : '0' }}
         >
-          {msg.msg}
+          {isBattle && (
+             <span className="mr-2 opacity-50 text-indigo-400 select-none font-bold text-xs mt-[3px]">▶</span>
+          )}
+          <span className="flex-1 drop-shadow-sm">{msg.msg}</span>
         </p>
       ))}
-      {/* 스크롤 타겟 */}
       <div ref={logEndRef} />
     </div>
   );

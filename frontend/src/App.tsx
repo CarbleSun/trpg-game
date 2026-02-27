@@ -197,73 +197,82 @@ function App() {
 				// ============================================================
         // [전투 화면]
         // ============================================================
-      	<main className="flex-1 w-full max-w-5xl mx-auto px-4 pb-20 pt-6">
-          <div className="flex flex-col h-full pt-4 pb-4">
-            
-            {/* 상단 영역: 왼쪽(상태창) / 오른쪽(전투씬) */}
-            <div className="flex flex-65 min-h-0 gap-4">
-
-              {/* 왼쪽: 상태창 */}
-              <div className="w-5/12 h-full pt-11">
-                <StatusDisplay 
-									player={player} 
-									compact={isBattle}
-									isSkillModalOpen={isStatusSkillModalOpen}
-                  onToggleSkillModal={handleToggleStatusSkillModal}
-								/>
-              </div>
-
-              {/* 오른쪽: 전투 씬 */}
-              <div className="w-7/12 h-full flex items-center justify-center">
-                <Scene
-                  player={player}
-                  monster={monster}
-                  isPlayerTurn={isPlayerTurn}
-                />
-              </div>
+      	<main className="flex-1 w-full max-w-5xl mx-auto px-4 pb-4 pt-4 flex flex-col justify-center h-full gap-4 overflow-hidden">
+          
+          {/* 상단: 전투 씬 (아이콘 크기 및 배치 최적화) */}
+          <div className="flex-1 max-h-[45vh] rounded-xl overflow-hidden border-4 border-gray-700 bg-gray-900 shadow-2xl relative flex items-center justify-center p-4">
+            <div className="w-full max-w-2xl h-full flex items-center justify-center scale-90 md:scale-100">
+              <Scene
+                player={player}
+                monster={monster}
+                isPlayerTurn={isPlayerTurn}
+								logMessages={logMessages}
+              />
             </div>
-
-            {/* 하단 영역: 게임 로그 (GameLog 자체 높이 사용) */}
-            <div className="shrink-0">
-              <GameLog messages={logMessages} />
-            </div>
-
-            {/* 최하단: 액션 메뉴 */}
-						{!isStatusSkillModalOpen && (
-							<ActionMenu
-								isOpen={isActionMenuOpen}
-								onClose={() => setIsActionMenuOpen(false)}
-								gameState={gameState}
-								isPlayerTurn={isPlayerTurn}
-								isProcessing={isProcessing}
-								recoveryCharges={recoveryCharges}
-								learnedSkills={player.skills}
-								skillCooldowns={player.skillCooldowns}
-								skills={skills}
-								onDungeonNext={actions.handleNextDungeon}
-								onDungeonRecover={actions.handleDungeonRecovery}
-								onAttack={actions.handleAttack}
-								onDefend={actions.handleDefend}
-								onRecover={actions.handleRecovery}
-								onEscape={actions.handleEscape}
-								onEnterShop={actions.handleEnterShop}
-								onOpenWeaponEnhance={actions.handleOpenWeaponEnhance}
-								onOpenScarecrow={actions.handleOpenScarecrow}
-								onOpenSkills={actions.handleOpenSkills}
-								onUseSkill={actions.handleUseSkill}
-								onOpenDungeonSelect={actions.handleOpenDungeonSelect}
-								onOpenBossSelect={actions.handleOpenBossSelect}
-								showBattleChoice={showBattleChoice}
-								onContinueBattle={actions.handleContinueBattle}
-								onExitDungeon={actions.handleExitDungeon}
-								isScarecrowBattle={isScarecrowBattle}
-								onExitScarecrowBattle={actions.handleExitScarecrowBattle}
-								isBattleSkillOpen={isBattleSkillOpen}
-								onToggleBattleSkills={actions.handleToggleBattleSkills}
-							/>
-						)}
           </div>
-				</main>
+
+          {/* 하단 통합 UI 패널 (모던 JRPG 스타일 다크 네이비 박스) */}
+          <div className="h-80 shrink-0 flex w-full bg-slate-900 border-2 border-slate-700/80 rounded-xl shadow-[inset_0_0_30px_rgba(0,0,0,0.8),0_10px_20px_rgba(0,0,0,0.5)] text-slate-200 font-sans overflow-hidden relative">
+            
+            {/* 장식용 은은한 배경 글로우 */}
+            <div className="absolute top-0 left-1/3 w-96 h-96 bg-indigo-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+
+            {/* 1. 액션 메뉴 (좌측) */}
+            <div className="w-1/4 h-full border-r border-slate-700/60 p-2 relative shrink-0 z-30">
+              {!isStatusSkillModalOpen && (
+                <ActionMenu
+                  isOpen={isActionMenuOpen}
+                  onClose={() => setIsActionMenuOpen(false)}
+                  gameState={gameState}
+                  isPlayerTurn={isPlayerTurn}
+                  isProcessing={isProcessing}
+                  recoveryCharges={recoveryCharges}
+                  learnedSkills={player.skills}
+                  skillCooldowns={player.skillCooldowns}
+                  skills={skills}
+                  onDungeonNext={actions.handleNextDungeon}
+                  onDungeonRecover={actions.handleDungeonRecovery}
+                  onAttack={actions.handleAttack}
+                  onDefend={actions.handleDefend}
+                  onRecover={actions.handleRecovery}
+                  onEscape={actions.handleEscape}
+                  onEnterShop={actions.handleEnterShop}
+                  onOpenWeaponEnhance={actions.handleOpenWeaponEnhance}
+                  onOpenScarecrow={actions.handleOpenScarecrow}
+                  onOpenSkills={actions.handleOpenSkills}
+                  onUseSkill={actions.handleUseSkill}
+                  onOpenDungeonSelect={actions.handleOpenDungeonSelect}
+                  onOpenBossSelect={actions.handleOpenBossSelect}
+                  showBattleChoice={showBattleChoice}
+                  onContinueBattle={actions.handleContinueBattle}
+                  onExitDungeon={actions.handleExitDungeon}
+                  isScarecrowBattle={isScarecrowBattle}
+                  onExitScarecrowBattle={actions.handleExitScarecrowBattle}
+                  isBattleSkillOpen={isBattleSkillOpen}
+                  onToggleBattleSkills={actions.handleToggleBattleSkills}
+                />
+              )}
+            </div>
+
+            {/* 2. 캐릭터 상태창 (중앙) */}
+            <div className="w-1/4 h-full border-r border-slate-700/60 p-2 shrink-0 z-10 bg-slate-800/30">
+              <StatusDisplay 
+                player={player} 
+                compact={isBattle}
+                isSkillModalOpen={isStatusSkillModalOpen}
+                onToggleSkillModal={handleToggleStatusSkillModal}
+              />
+            </div>
+
+            {/* 3. 게임 로그 (우측) */}
+            <div className="w-2/4 h-full overflow-hidden relative flex flex-col z-10">
+               <div className="flex-1 w-full h-full">
+                 <GameLog messages={logMessages} isBattle={true} />
+               </div>
+            </div>
+            
+          </div>
+        </main>
       ) : (
 				// ============================================================
         // [홈 화면]
