@@ -6,7 +6,9 @@ import {
   playHoverSound, 
   playEnterWorldSound, 
   playTitleMusic, 
-  stopTitleMusic 
+  stopTitleMusic,
+  playCreationMusic,   // 🌟 새로 만든 재생 함수 추가
+  stopCreationMusic    // 🌟 새로 만든 정지 함수 추가
 } from '../game/sound';
 
 interface SetupScreenProps {
@@ -16,7 +18,6 @@ interface SetupScreenProps {
 const jobs: Job[] = ['마법사', '전사', '도적'];
 const jobIcons: Record<Job, string> = { '마법사': '🔮', '전사': '⚔️', '도적': '🗡️' };
 
-// 직업별 상세 설명 데이터
 const jobDescriptions: Record<Job, string> = {
   '전사': '높은 체력과 묵직한 물리 공격력으로 적을 분쇄합니다. 든든한 방어력을 갖춘 근접 전투의 스페셜리스트입니다.',
   '마법사': '강력한 마법으로 적의 약점을 찌릅니다. 체력은 낮지만, 압도적인 파괴력과 다양한 유틸리티를 자랑합니다.',
@@ -26,20 +27,25 @@ const jobDescriptions: Record<Job, string> = {
 const SetupScreen = ({ onGameStart }: SetupScreenProps) => {
   const [step, setStep] = useState<'title' | 'creation'>('title');
   const [name, setName] = useState('');
-  
-  // 🌟 현재 선택된 직업 (기본값: '전사'). 이제 이 상태 하나만으로 설명창까지 컨트롤합니다.
   const [selectedJob, setSelectedJob] = useState<Job>('전사'); 
 
+  // 🌟 핵심 로직: step 상태에 따라 어떤 배경음악을 재생할지 결정
   useEffect(() => {
     if (step === 'title') {
+      stopCreationMusic(); // 캐릭터 창에서 넘어왔을 수 있으니 정지
       playTitleMusic();
+    } else if (step === 'creation') {
+      stopTitleMusic();    // 타이틀 창에서 넘어오자마자 정지
+      playCreationMusic(); // 조건 1: 캐릭터 생성 창 진입 시 재생
     }
   }, [step]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim()) {
+      // 🌟 조건 2: "세계로 진입" 버튼을 누르면 즉시 모든 노래 정지
       stopTitleMusic();
+      stopCreationMusic(); 
       playEnterWorldSound();
       onGameStart(name.trim(), selectedJob);
     } else {
@@ -53,14 +59,14 @@ const SetupScreen = ({ onGameStart }: SetupScreenProps) => {
       className="relative flex h-screen w-full items-center justify-center bg-sky-50 text-slate-800 font-sans overflow-hidden"
     >
       
-      {/* 1. 배경 오라 레이어 */}
+      {/* 배경 오라 레이어 */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-amber-200/40 blur-[100px] rounded-full mix-blend-multiply animate-pulse"></div>
         <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-sky-300/40 blur-[120px] rounded-full mix-blend-multiply"></div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-indigo-100/50 blur-[150px] rounded-full mix-blend-multiply"></div>
       </div>
 
-      {/* 2. 진한 커튼 햇살 애니메이션 레이어 */}
+      {/* 진한 커튼 햇살 애니메이션 레이어 */}
       <div className="absolute inset-0 z-1 overflow-hidden pointer-events-none mix-blend-overlay">
         <style>{`
           @keyframes curtainSway1 {
@@ -92,7 +98,7 @@ const SetupScreen = ({ onGameStart }: SetupScreenProps) => {
         />
       </div>
 
-      {/* 3. 콘텐츠 레이어 */}
+      {/* 콘텐츠 레이어 */}
       {step === 'title' ? (
         <div className="relative z-10 flex flex-col items-center justify-center w-full h-full">
           <style>{`
@@ -115,7 +121,7 @@ const SetupScreen = ({ onGameStart }: SetupScreenProps) => {
               onMouseEnter={playHoverSound} 
               onClick={(e) => {
                 e.stopPropagation(); 
-                stopTitleMusic(); 
+                // 🌟 step이 'creation'으로 바뀌면서 useEffect가 작동해 새 노래가 재생됩니다.
                 playStartSound(); 
                 setStep('creation');
               }}
@@ -159,10 +165,10 @@ const SetupScreen = ({ onGameStart }: SetupScreenProps) => {
                 <button
                   type="button"
                   key={job}
-                  onMouseEnter={playHoverSound} // 🌟 불필요한 onMouseLeave 제거
+                  onMouseEnter={playHoverSound} 
                   onClick={() => {
                     playClickSound(); 
-                    setSelectedJob(job) // 클릭했을 때만 직업 상태 변경
+                    setSelectedJob(job)
                   }}
                   className={`flex flex-col items-center justify-center py-4 rounded-xl border transition-all duration-200 shadow-sm ${
                     selectedJob === job 
@@ -176,10 +182,9 @@ const SetupScreen = ({ onGameStart }: SetupScreenProps) => {
               ))}
             </div>
 
-            {/* 🌟 선택된 직업의 설명을 고정적으로 보여주는 영역 */}
             <div className="h-16 mt-1 flex items-center justify-center transition-all duration-300">
               <div 
-                key={selectedJob} // 🌟 직업이 바뀔 때마다 부드럽게 나타나는 애니메이션(fade-in)을 다시 트리거하기 위해 key 부여
+                key={selectedJob} 
                 className="w-full p-3 bg-white/70 backdrop-blur-md rounded-xl border border-white/80 text-xs text-slate-700 shadow-sm leading-relaxed animate-in fade-in zoom-in-95 duration-200"
               >
                 <span className="font-bold text-indigo-600 mr-1.5">[{selectedJob}]</span>
@@ -203,7 +208,7 @@ const SetupScreen = ({ onGameStart }: SetupScreenProps) => {
               onMouseEnter={playHoverSound}
               onClick={() => {
                 playClickSound(); 
-                setStep('title')
+                setStep('title') // 🌟 'title'로 돌아가면 useEffect에 의해 생성 BGM은 멈추고 타이틀 BGM이 재생됩니다.
               }}
               className="text-xs font-medium tracking-wide text-slate-400 hover:text-indigo-600 transition-colors mt-1 py-2"
             >
