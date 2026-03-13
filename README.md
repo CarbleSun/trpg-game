@@ -207,13 +207,13 @@
 2️⃣ 마우스나 키보드 버튼을 사용하여 게임을 진행하세요! <br>
 
 ## 🖥 게임 화면
-<img width="1230" height="872" alt="Image" src="https://github.com/user-attachments/assets/2fb00d4c-9e5b-4da0-acc5-792298e57659" />
-
 <img width="1114" height="944" alt="Image" src="https://github.com/user-attachments/assets/23496f57-96ea-400c-b579-7968af004cd3" />
 
 <img width="1082" height="942" alt="Image" src="https://github.com/user-attachments/assets/c31027c2-d7c2-4ef7-8f9a-34b1cbd8ec12" />
 
 <img width="1225" height="872" alt="Image" src="https://github.com/user-attachments/assets/a07c76d0-a43c-41d8-b6ad-1e8cb5c2fba9" />
+
+<img width="1230" height="872" alt="Image" src="https://github.com/user-attachments/assets/2fb00d4c-9e5b-4da0-acc5-792298e57659" />
 
 <img width="1123" height="925" alt="Image" src="https://github.com/user-attachments/assets/d1c682ee-e3fe-4d4e-a5ae-33fa65454c1f" />
 
