@@ -3,6 +3,7 @@ import type { PlayerStats } from '../game/types';
 import { skills as allSkills } from '../game/constants'; 
 import ProgressBar from './ProgressBar';
 import { getItemGrade, getGradeColorClass } from '../game/utils';
+import { getEffectivePlayerStats } from '../game/playerLogic';
 
 interface StatusDisplayProps {
   player: PlayerStats;
@@ -18,37 +19,26 @@ const StatusDisplay = ({
   onToggleSkillModal 
 }: StatusDisplayProps) => {
 
-	const weaponAtk = player.weapon?.value || 0;
-  const armorDef = player.armor?.value || 0;
   const weaponEnh = player.weapon ? ((player.weaponEnhanceLevels || {})[player.weapon.id] || 0) * 5 : 0;
   const armorEnh = player.armor ? ((player.armorEnhanceLevels || {})[player.armor.id] || 0) * 5 : 0;
-  
-	const { buffAtk, buffDef, totalAtk, totalDef } = useMemo(() => {
-		let bAtk = 0;
-		let bDef = 0; 
 
-		const baseAtk = player.atk + weaponAtk + weaponEnh;
-		let baseDef = player.def + armorDef + armorEnh;
+  const { buffAtk, buffDef, totalAtk, totalDef } = useMemo(() => {
+    const effective = getEffectivePlayerStats(player);
 
-		const activeBuffs = player.activeBuffs || [];
-		const defBeforeBuffs = baseDef;
+    // 버프가 없을 때의 기본 ATK/DEF (버프 표시용 델타 계산)
+    const baseAtk = player.atk + (player.weapon?.value || 0) + weaponEnh;
+    const baseDef = player.def + (player.armor?.value || 0) + armorEnh;
 
-		activeBuffs.forEach((buff) => {
-			if (buff.chargeAttackMultiplier && buff.chargeAttackMultiplier > 0) {
-        bAtk += Math.floor(baseAtk * buff.chargeAttackMultiplier);
-      }
-      if (buff.defenseMultiplier !== undefined) {
-        baseDef = Math.floor(baseDef * buff.defenseMultiplier);
-      }
-		});
+    const bAtk = effective.atk - baseAtk;
+    const bDef = baseDef - effective.def; // 양수면 DEF 감소, 음수면 DEF 증가
 
-		bDef = defBeforeBuffs - baseDef;
-
-		const finalAtk = baseAtk + bAtk;
-		const finalDef = Math.max(0, baseDef);
-
-		return { buffAtk: bAtk, buffDef: bDef, totalAtk: finalAtk, totalDef: finalDef };
-	}, [player, weaponAtk, weaponEnh, armorDef, armorEnh]);
+    return {
+      buffAtk: bAtk,
+      buffDef: bDef,
+      totalAtk: effective.atk,
+      totalDef: effective.def,
+    };
+  }, [player.atk, player.def, player.level, player.activeBuffs, weaponEnh, armorEnh, player.weapon, player.armor]);
 
 	const learnedSkills = useMemo(() => {
 		return allSkills.filter(s => (player.skills || []).includes(s.key));
