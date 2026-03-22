@@ -9,7 +9,6 @@ import type {
   LogMessage,
   LogType,
   EquipmentItem,
-  Dungeon,
   BossStats,
   SkillKey,
   BossReward,
@@ -20,30 +19,27 @@ import {
   dungeons,
   petShopList,
   bossDungeons,
-  createBoss,
 } from "../game/constants";
 import { weaponShopList, armorShopList } from "../game/shopItems";
-import { STARTER_CLUB, bossRewardPool, normalDropPool } from "../game/engineConstants";
+import { STARTER_CLUB } from "../game/engineConstants";
+// getRandom은 useMonsterEngine 내부로 이동했지만, handleAttack 등에서 아직 사용
 // 유틸리티 임포트
 import { getRandom } from "../game/utils";
 // 분리된 로직 임포트
 import {
   createNewPlayer,
-  checkLevelUp,
   getEffectivePlayerStats,
 } from "../game/playerLogic";
-import { makeMonster } from "../game/monsterLogic";
 import { calculateAttack } from "../game/battleLogic";
 import { tickSkills, canLearnSkill } from "../game/skillLogic";
 import { applyPetStartOfTurn } from "../game/petLogic";
+// 몬스터 엔진 임포트
+import { useMonsterEngine } from "./useMonsterEngine";
 
 // --- 메인 커스텀 훅 ---
 
 export const useGameEngine = () => {
   const [player, setPlayer] = useState<PlayerStats | null>(null);
-  const [monster, setMonster] = useState<CharacterStats | null>(null);
-	const [dungeonSessionKills, setDungeonSessionKills] = useState(0); // 던전 연속 사냥 횟수 카운트
-  const [boss, setBoss] = useState<BossStats | null>(null); // 보스 상태
   const [logMessages, setLogMessages] = useState<LogMessage[]>([]);
   const [gameState, setGameState] = useState<GameState>("setup");
   const [isPlayerTurn, setIsPlayerTurn] = useState(true);
@@ -71,13 +67,6 @@ export const useGameEngine = () => {
   });
   const [bossReward, setBossReward] = useState<BossReward | null>(null);
   const [isDeveloperMode, setIsDeveloperMode] = useState(false);
-  const [isScarecrowBattle, setIsScarecrowBattle] = useState(false); // 허수아비 전투 플래그
-  const [scarecrowConfig, setScarecrowConfig] = useState<{
-    maxHp: number;
-    atk: number;
-    def: number;
-    luk: number;
-  } | null>(null); // 허수아비 설정 저장
 
   // Electron API 타입 정의
   type ElectronAPI = {
@@ -98,6 +87,61 @@ export const useGameEngine = () => {
 
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
   const isElectron = !!electronAPI;
+
+  // ─── 로그 추가 유틸리티 ──────────────────────────────────────────────────────
+  const addLog = (msg: string, type: LogType = "normal") => {
+    const id = Date.now() + getRandom(1, 1000);
+    setLogMessages((prev) => [...prev, { id, msg, type }]);
+  };
+
+  const addLogs = (logs: Omit<LogMessage, "id">[]) => {
+    const newLogs = logs.map((log, i) => ({
+      ...log,
+      id: Date.now() + i + getRandom(1, 1000),
+    }));
+    setLogMessages((prev) => [...prev, ...newLogs]);
+  };
+
+  // ─── 몬스터 엔진 ────────────────────────────────────────────────────────────
+  const {
+    monster,
+    boss,
+    isScarecrowBattle,
+    scarecrowConfig,
+    dungeonSessionKills,
+    setMonster,
+    setBoss,
+    setIsScarecrowBattle,
+    setScarecrowConfig,
+    setDungeonSessionKills,
+    runMonsterTurn,
+    runBossTurn,
+    handleBattleEnd,
+    handleBossBattleEnd,
+    handleNextDungeon,
+    handleSelectBossDungeon,
+  } = useMonsterEngine({
+    player,
+    isProcessing,
+    currentDungeonId,
+    currentBossDungeonId,
+    bossCooldowns,
+    dungeonKillCounts,
+    setPlayer,
+    setGameState,
+    setIsPlayerTurn,
+    setIsProcessing,
+    setConsecutiveMisses,
+    setRecoveryCharges,
+    setShowBattleChoice,
+    setCurrentDungeonId,
+    setCurrentBossDungeonId,
+    setBossCooldowns,
+    setDungeonKillCounts,
+    setBossReward,
+    addLog,
+    addLogs,
+  });
 
   /**
    * 개발자 모드 활성화
@@ -387,22 +431,6 @@ export const useGameEngine = () => {
   };
 
   /**
-   * 로그 추가 유틸리티
-   */
-  const addLog = (msg: string, type: LogType = "normal") => {
-    const id = Date.now() + getRandom(1, 1000);
-    setLogMessages((prev) => [...prev, { id, msg, type }]);
-  };
-
-  const addLogs = (logs: Omit<LogMessage, "id">[]) => {
-    const newLogs = logs.map((log, i) => ({
-      ...log,
-      id: Date.now() + i + getRandom(1, 1000),
-    }));
-    setLogMessages((prev) => [...prev, ...newLogs]);
-  };
-
-  /**
    * 스킬 배우기 (State 변경)
    */
   const learnSkill = (key: SkillKey) => {
@@ -462,947 +490,23 @@ export const useGameEngine = () => {
     }
   };
 
-  /**
-   * 몬스터 턴 실행 (State 변경)
-   */
-  const runMonsterTurn = (
-    currentPlayer: PlayerStats,
-    currentMonster: CharacterStats
-  ) => {
-    setIsProcessing(true);
-
-    setTimeout(() => {
-      // 턴 시작 시점에 플레이어가 없으면(예: 페이지 새로고침) 중단
-      if (!player) {
-        setIsProcessing(false);
-        return;
-      }
-
-      addLog(`--- 몬스터의 턴 ---`, "normal");
-
-      // 몬스터 기절 체크
-      if ((currentPlayer.monsterStunnedTurns || 0) > 0) {
-        addLog(`💫 적이 기절하여 행동할 수 없다!`, "fail");
-        const nextPlayer = {
-          ...currentPlayer,
-          monsterStunnedTurns: (currentPlayer.monsterStunnedTurns || 0) - 1,
-        };
-
-        // 플레이어 턴으로 전환
-        addLog(`--- 플레이어의 턴 ---`, "normal");
-        const ticked = tickSkills(nextPlayer); // 순수 로직
-        // 펫 로직 호출 (순수 로직)
-        const {
-          player: playerAfterPet,
-          monster: monsterAfterPet,
-          logs: petLogs,
-        } = applyPetStartOfTurn(
-          ticked,
-          currentMonster,
-          getEffectivePlayerStats
-        );
-        addLogs(petLogs);
-        setPlayer(playerAfterPet);
-        setMonster(monsterAfterPet);
-
-        // 허수아비 전투인 경우 체력 무한 (자동 회복)
-        if (isScarecrowBattle && monsterAfterPet && monsterAfterPet.hp <= 0) {
-          addLog(
-            `🎯 허수아비를 쓰러뜨렸지만, 허수아비는 즉시 회복됩니다!`,
-            "vic"
-          );
-          const restoredScarecrow: CharacterStats = {
-            ...monsterAfterPet,
-            hp: scarecrowConfig?.maxHp || monsterAfterPet.maxHp,
-          };
-          setMonster(restoredScarecrow);
-          setIsPlayerTurn(true);
-          setIsProcessing(false);
-          return;
-        }
-
-        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
-          handleBattleEnd("victory", playerAfterPet, monsterAfterPet);
-          setIsProcessing(false);
-          return;
-        }
-        setIsPlayerTurn(true);
-        setIsProcessing(false);
-        return;
-      }
-
-      // 배리어 체크
-      const barrierIdx = (currentPlayer.activeBuffs || []).findIndex(
-        (b) => b.barrier
-      );
-      if (barrierIdx >= 0) {
-        const skillName = currentPlayer.activeBuffs![barrierIdx].key;
-        addLog(`🛡️ [${skillName}] 스킬이 몬스터의 공격을 무효화했다!`, "vic");
-        const nextBuffs = [...(currentPlayer.activeBuffs || [])];
-        nextBuffs.splice(barrierIdx, 1);
-        const updatedAfterBarrier = {
-          ...currentPlayer,
-          activeBuffs: nextBuffs,
-        };
-
-        addLog(`--- 플레이어의 턴 ---`, "normal");
-        const ticked = tickSkills(updatedAfterBarrier);
-        const {
-          player: playerAfterPet,
-          monster: monsterAfterPet,
-          logs: petLogs,
-        } = applyPetStartOfTurn(
-          ticked,
-          currentMonster,
-          getEffectivePlayerStats
-        );
-        addLogs(petLogs);
-        setPlayer(playerAfterPet);
-        setMonster(monsterAfterPet);
-
-        // 허수아비 전투인 경우 체력 무한 (자동 회복)
-        if (isScarecrowBattle && monsterAfterPet && monsterAfterPet.hp <= 0) {
-          addLog(
-            `🎯 허수아비를 쓰러뜨렸지만, 허수아비는 즉시 회복됩니다!`,
-            "vic"
-          );
-          const restoredScarecrow: CharacterStats = {
-            ...monsterAfterPet,
-            hp: scarecrowConfig?.maxHp || monsterAfterPet.maxHp,
-          };
-          setMonster(restoredScarecrow);
-          setIsPlayerTurn(true);
-          setIsProcessing(false);
-          return;
-        }
-
-        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
-          handleBattleEnd("victory", playerAfterPet, monsterAfterPet);
-          setIsProcessing(false);
-          return;
-        }
-        setIsPlayerTurn(true);
-        setIsProcessing(false);
-        return;
-      }
-
-      // 회피 체크
-      const hasEvade = (currentPlayer.activeBuffs || []).some(
-        (b) => b.evadeAll
-      );
-      if (hasEvade) {
-        addLog(`🍃 스킬 효과로 몬스터의 공격을 회피했다!`, "vic");
-        addLog(`--- 플레이어의 턴 ---`, "normal");
-        const ticked = tickSkills(currentPlayer);
-        const {
-          player: playerAfterPet,
-          monster: monsterAfterPet,
-          logs: petLogs,
-        } = applyPetStartOfTurn(
-          ticked,
-          currentMonster,
-          getEffectivePlayerStats
-        );
-        addLogs(petLogs);
-        setPlayer(playerAfterPet);
-        setMonster(monsterAfterPet);
-
-        // 허수아비 전투인 경우 체력 무한 (자동 회복)
-        if (isScarecrowBattle && monsterAfterPet && monsterAfterPet.hp <= 0) {
-          addLog(
-            `🎯 허수아비를 쓰러뜨렸지만, 허수아비는 즉시 회복됩니다!`,
-            "vic"
-          );
-          const restoredScarecrow: CharacterStats = {
-            ...monsterAfterPet,
-            hp: scarecrowConfig?.maxHp || monsterAfterPet.maxHp,
-          };
-          setMonster(restoredScarecrow);
-          setIsPlayerTurn(true);
-          setIsProcessing(false);
-          return;
-        }
-
-        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
-          handleBattleEnd("victory", playerAfterPet, monsterAfterPet);
-          setIsProcessing(false);
-          return;
-        }
-        setIsPlayerTurn(true);
-        setIsProcessing(false);
-        return;
-      }
-
-      // 약화(weaken) 적용
-      const weaken =
-        (currentPlayer.activeBuffs || []).find(
-          (b) => (b.weakenPercent || 0) > 0
-        )?.weakenPercent || 0;
-      const attackerForTurn =
-        weaken > 0
-          ? {
-              ...currentMonster,
-              atk: Math.max(1, Math.floor(currentMonster.atk * (1 - weaken))),
-            }
-          : currentMonster;
-
-      const effectivePlayer = getEffectivePlayerStats(currentPlayer); // 순수 로직
-      const result = calculateAttack(attackerForTurn, effectivePlayer); // 순수 로직
-      addLogs(result.logs);
-
-      let updatedPlayer = {
-        ...currentPlayer,
-        hp: result.defender.hp,
-        isDefending: false,
-      }; // 방어 상태 해제
-
-      // 반사/카운터 처리
-      const reflect =
-        (currentPlayer.activeBuffs || []).find(
-          (b) => (b.reflectPercent || 0) > 0
-        )?.reflectPercent || 0;
-      let updatedMonster = { ...currentMonster };
-      const last = result.logs[result.logs.length - 1];
-      const match = last?.msg.match(/(\d+)의 데미지를/);
-      const dealt = match ? parseInt(match[1], 10) : 0;
-      if (reflect > 0 && dealt > 0) {
-        const reflectDmg = Math.floor(dealt * reflect);
-        updatedMonster.hp = Math.max(0, updatedMonster.hp - reflectDmg);
-        addLog(
-          `🔄 스킬 효과로 ${reflectDmg}의 피해를 반사! (적 HP: ${updatedMonster.hp})`,
-          "vic"
-        );
-        setMonster(updatedMonster);
-      }
-      // ... (카운터 로직) ...
-
-      if (result.isBattleOver) {
-        handleBattleEnd("defeat", updatedPlayer, currentMonster);
-      } else {
-        // 턴 종료, 플레이어 턴 시작
-        addLog(`--- 플레이어의 턴 ---`, "normal");
-        const ticked = tickSkills(updatedPlayer); // 순수 로직
-        const {
-          player: playerAfterPet,
-          monster: monsterAfterPet,
-          logs: petLogs,
-        } = applyPetStartOfTurn(
-          ticked,
-          updatedMonster,
-          getEffectivePlayerStats
-        ); // 순수 로직
-        addLogs(petLogs);
-        setPlayer(playerAfterPet);
-        setMonster(monsterAfterPet);
-
-        // 허수아비 전투인 경우 체력 무한 (자동 회복)
-        if (isScarecrowBattle && monsterAfterPet && monsterAfterPet.hp <= 0) {
-          addLog(
-            `🎯 허수아비를 쓰러뜨렸지만, 허수아비는 즉시 회복됩니다!`,
-            "vic"
-          );
-          const restoredScarecrow: CharacterStats = {
-            ...monsterAfterPet,
-            hp: scarecrowConfig?.maxHp || monsterAfterPet.maxHp,
-          };
-          setMonster(restoredScarecrow);
-          setIsPlayerTurn(true);
-          setIsProcessing(false);
-          return;
-        }
-
-        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
-          handleBattleEnd("victory", playerAfterPet, monsterAfterPet);
-          setIsProcessing(false);
-          return;
-        }
-        setIsPlayerTurn(true);
-        setIsProcessing(false);
-      }
-    }, 1500);
-  };
-
-  /**
-   * 보스 턴 실행 (State 변경)
-   */
-  const runBossTurn = (currentPlayer: PlayerStats, currentBoss: BossStats) => {
-    setIsProcessing(true);
-
-    setTimeout(() => {
-      if (!currentPlayer) {
-        setIsProcessing(false);
-        return;
-      }
-
-      addLog(`--- 몬스터의 턴 ---`, "normal");
-
-      // 0. 보스 턴 시작 시, 보스 자신의 버프/쿨다운 틱
-      let updatedBoss = tickSkills(currentBoss); // (tickSkills는 PlayerStats | BossStats 둘 다 처리 가능)
-
-      // 1. 플레이어 상태 체크 (기절, 배리어, 회피)
-      if ((currentPlayer.monsterStunnedTurns || 0) > 0) {
-        addLog(`💫 적이 기절하여 행동할 수 없다!`, "fail");
-        const nextPlayer = {
-          ...currentPlayer,
-          monsterStunnedTurns: (currentPlayer.monsterStunnedTurns || 0) - 1,
-        };
-        addLog(`--- 플레이어의 턴 ---`, "normal");
-        const ticked = tickSkills(nextPlayer);
-        const {
-          player: playerAfterPet,
-          monster: monsterAfterPet,
-          logs: petLogs,
-        } = applyPetStartOfTurn(ticked, updatedBoss, getEffectivePlayerStats);
-        addLogs(petLogs);
-        setPlayer(playerAfterPet);
-        setBoss(monsterAfterPet as BossStats);
-        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
-          handleBossBattleEnd(
-            "victory",
-            playerAfterPet,
-            monsterAfterPet as BossStats
-          );
-          setIsProcessing(false);
-          return;
-        }
-        setIsPlayerTurn(true);
-        setIsProcessing(false);
-        return;
-      }
-      const barrierIdx = (currentPlayer.activeBuffs || []).findIndex(
-        (b) => b.barrier
-      );
-      if (barrierIdx >= 0) {
-        const skillName = currentPlayer.activeBuffs![barrierIdx].key;
-        addLog(`🛡️ [${skillName}] 스킬이 보스의 공격을 무효화했다!`, "vic");
-        const nextBuffs = [...(currentPlayer.activeBuffs || [])];
-        nextBuffs.splice(barrierIdx, 1);
-        const updatedAfterBarrier = {
-          ...currentPlayer,
-          activeBuffs: nextBuffs,
-        };
-        addLog(`--- 플레이어의 턴 ---`, "normal");
-        const ticked = tickSkills(updatedAfterBarrier);
-        const {
-          player: playerAfterPet,
-          monster: monsterAfterPet,
-          logs: petLogs,
-        } = applyPetStartOfTurn(ticked, updatedBoss, getEffectivePlayerStats);
-        addLogs(petLogs);
-        setPlayer(playerAfterPet);
-        setBoss(monsterAfterPet as BossStats);
-        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
-          handleBossBattleEnd(
-            "victory",
-            playerAfterPet,
-            monsterAfterPet as BossStats
-          );
-          setIsProcessing(false);
-          return;
-        }
-        setIsPlayerTurn(true);
-        setIsProcessing(false);
-        return;
-      }
-      const hasEvade = (currentPlayer.activeBuffs || []).some(
-        (b) => b.evadeAll
-      );
-      if (hasEvade) {
-        addLog(`🍃 스킬 효과로 보스의 공격을 회피했다!`, "vic");
-        addLog(`--- 플레이어의 턴 ---`, "normal");
-        const ticked = tickSkills(currentPlayer);
-        const {
-          player: playerAfterPet,
-          monster: monsterAfterPet,
-          logs: petLogs,
-        } = applyPetStartOfTurn(ticked, updatedBoss, getEffectivePlayerStats);
-        addLogs(petLogs);
-        setPlayer(playerAfterPet);
-        setBoss(monsterAfterPet as BossStats);
-        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
-          handleBossBattleEnd(
-            "victory",
-            playerAfterPet,
-            monsterAfterPet as BossStats
-          );
-          setIsProcessing(false);
-          return;
-        }
-        setIsPlayerTurn(true);
-        setIsProcessing(false);
-        return;
-      }
-
-      // 2. 보스 스킬 사용 결정
-      // 실제 존재하는 스킬만 필터링
-      const availableSkillKeys = new Set(allSkills.map((s) => s.key));
-
-      // 보스 스킬 배열을 정리하여 유효한 스킬만 남김
-      const validBossSkills = (updatedBoss.skills || []).filter((key) =>         
-        availableSkillKeys.has(key as SkillKey)
-      );
-
-      const availableSkills = validBossSkills.filter(
-        (key) => ((updatedBoss.skillCooldowns || {})[key] || 0) <= 0
-      );
-      const SKILL_CHANCE = 50; // 50% 확률
-      let usedSkill = false; // 스킬 사용 여부 플래그
-
-      if (availableSkills.length > 0 && getRandom(1, 100) <= SKILL_CHANCE) {
-        // --- 스킬 사용 ---
-        const skillKey = availableSkills[getRandom(0, availableSkills.length - 1)];
-        const skill = allSkills.find((s) => s.key === skillKey);
-
-        if (!skill) {
-					// 1. 보스 턴에서 버그가 일어나려 할 경우 '천벌'로 인한 자멸 발동
-          addLog(`⚡ 보스가 치트를 쓰려다가 천벌을 받았습니다!`, "cri");
-
-          // 2. 보스 체력 절반 감소 로직(천벌 발동)
-          const penalty = Math.floor(updatedBoss.hp / 2);
-          updatedBoss.hp = Math.max(1, updatedBoss.hp - penalty); // 최소 1은 남김 (죽이지는 않음)
-          addLog(`⚡ 천벌로 인해 보스의 체력이 절반 줄어듭니다! (-${penalty})`, "vic");
-          
-          setBoss(updatedBoss); // 감소된 체력 반영
-
-          // 3. 게임 멈춤 방지: 강제로 플레이어 턴으로 넘김
-          addLog(`--- 플레이어의 턴 ---`, "normal");
-          
-          // 플레이어 턴 시작 처리 (틱 데미지, 펫 효과 등)
-          const ticked = tickSkills(currentPlayer);
-          const {
-            player: playerAfterPet,
-            monster: monsterAfterPet,
-            logs: petLogs,
-          } = applyPetStartOfTurn(ticked, updatedBoss, getEffectivePlayerStats);
-          
-          addLogs(petLogs);
-          setPlayer(playerAfterPet);
-          setBoss(monsterAfterPet as BossStats);
-
-          setIsPlayerTurn(true);
-          setIsProcessing(false);
-          return;
-        }
-
-				// 스킬 사용 시작
-        usedSkill = true;
-        addLog(`👹 ${currentBoss.name}의 스킬! [${skill.name}]!`, "cri");
-
-        // 쿨다운 설정
-        updatedBoss.skillCooldowns = {
-          ...(updatedBoss.skillCooldowns || {}),
-          [skillKey]: skill.cooldown,
-        };
-
-        if (skill.kind === "attack") {
-					// [공격 스킬]
-          const mult = skill.damageMultiplier || 1.0;
-          const damage = Math.floor(updatedBoss.atk * mult * (getRandom(90,110)/100));
-          const defense = getEffectivePlayerStats(currentPlayer).def;
-          let finalDamage = Math.max(Math.floor(damage * 0.1), damage - defense);
-
-          if (currentPlayer.isDefending) {
-            finalDamage = Math.floor(finalDamage * 0.5);
-            addLog(`🛡️ 방어 태세로 데미지를 줄였습니다!`, 'normal');
-          }
-          
-          let newHp = currentPlayer.hp - finalDamage;
-          addLog(`💥 ${skill.name}! 플레이어에게 ${finalDamage}의 피해!`, 'fail');
-          
-          setPlayer({ ...currentPlayer, hp: newHp, isDefending: false });
-          if (newHp <= 0) {
-            handleBossBattleEnd('defeat', { ...currentPlayer, hp: 0 }, updatedBoss);
-            setIsProcessing(false);
-            return;
-          }
-        }
-
-        else if (skill.kind === "heal") {
-          // [회복 스킬]
-          const mult = skill.damageMultiplier || 1.0;
-          const heal = Math.floor(updatedBoss.atk * mult);
-          updatedBoss.hp = Math.min(updatedBoss.maxHp, updatedBoss.hp + heal);
-          addLog(`💚 보스가 체력을 ${heal} 회복했습니다.`, 'normal');
-        }
-
-        else if (skill.kind === "buff") {
-          // [버프 스킬]
-          const newBuff = {
-            key: skill.key,
-            remainingTurns: skill.duration || 3,
-            bonuses: {},
-            // ... 기존 버프 효과 매핑
-            evadeAll: skill.effect?.type === "evade",
-            reflectPercent: skill.effect?.type === "reflect" ? skill.effect.value : 0,
-            barrier: skill.effect?.type === "barrier",
-            chargeAttackMultiplier: skill.effect?.type === "charge" ? skill.effect.value : 0,
-          };
-          updatedBoss.activeBuffs = [...(updatedBoss.activeBuffs || []), newBuff];
-          addLog(`🔥 보스가 버프를 시전했습니다.`, 'normal');
-        }
-				// 스킬 사용 후 턴 종료 (일반 공격 스킵)
-        setBoss(updatedBoss);
-        setIsProcessing(false);
-        setIsPlayerTurn(true);
-        return;
-      }
-
-      // 3. 스킬 사용 후 또는 일반 공격
-      // (스킬이 공격 스킬이 아니었거나(버프), 스킬을 사용하지 않았을 경우)
-      // (단, 'THEWORLD' 스킬은 위에서 return 되어 이 로직을 실행하지 않음)
-      const weaken =
-        (currentPlayer.activeBuffs || []).find(
-          (b) => (b.weakenPercent || 0) > 0
-        )?.weakenPercent || 0;
-
-      // 보스의 차지/트루스트라이크 등 버프 적용
-      const charge =
-        (updatedBoss.activeBuffs || []).find(
-          (b) => (b.chargeAttackMultiplier || 0) > 0
-        )?.chargeAttackMultiplier || 0;
-      const trueStrike = (updatedBoss.activeBuffs || []).some(
-        (b) => b.trueStrikeNext
-      );
-
-      let attackerForTurn = {
-        ...updatedBoss,
-        atk: Math.max(1, Math.floor(updatedBoss.atk * (1 - weaken))),
-      };
-      if (charge > 0) {
-        attackerForTurn.atk = Math.floor(attackerForTurn.atk * (1 + charge));
-        addLog(`👹 [${usedSkill}] 효과! 보스의 공격력 증폭!`, "cri");
-      }
-
-      let effectivePlayer = getEffectivePlayerStats(currentPlayer);
-      if (trueStrike) {
-        effectivePlayer.def = 0; // 방어 무시
-        addLog(
-          `🎯 [${usedSkill}] 효과! 보스의 공격이 방어를 무시합니다!`,
-          "cri"
-        );
-      }
-
-      // 공격 실행
-      const result = calculateAttack(attackerForTurn, effectivePlayer); // 순수 로직
-      addLogs(result.logs);
-
-      let updatedPlayer = {
-        ...currentPlayer,
-        hp: result.defender.hp,
-        isDefending: false,
-      }; // 방어 상태 해제
-      // (만약 보스가 스턴 스킬을 썼다면) updatedPlayer.isStunnedTurns = playerStunnedThisTurn;
-
-      // 버프 제거
-      if (charge > 0) {
-        const chargeIdx = (updatedBoss.activeBuffs || []).findIndex(
-          (b) => b.chargeAttackMultiplier
-        );
-        if (chargeIdx >= 0) updatedBoss.activeBuffs!.splice(chargeIdx, 1);
-      }
-      if (trueStrike) {
-        const trueStrikeIdx = (updatedBoss.activeBuffs || []).findIndex(
-          (b) => b.trueStrikeNext
-        );
-        if (trueStrikeIdx >= 0)
-          updatedBoss.activeBuffs!.splice(trueStrikeIdx, 1);
-      }
-
-      setPlayer(updatedPlayer);
-
-      // 4. 반사/카운터 로직
-      const reflect =
-        (currentPlayer.activeBuffs || []).find(
-          (b) => (b.reflectPercent || 0) > 0
-        )?.reflectPercent || 0;
-      const last = result.logs[result.logs.length - 1];
-      const match = last?.msg.match(/(\d+)의 데미지를/);
-      const dealt = match ? parseInt(match[1], 10) : 0;
-      if (reflect > 0 && dealt > 0) {
-        const reflectDmg = Math.floor(dealt * reflect);
-        updatedBoss.hp = Math.max(0, updatedBoss.hp - reflectDmg);
-        addLog(
-          `🔄 스킬 효과로 ${reflectDmg}의 피해를 반사! (적 HP: ${updatedBoss.hp})`,
-          "vic"
-        );
-      }
-      setBoss(updatedBoss); // 보스 상태 최종 업데이트
-
-      // 5. 전투 종료 확인
-      if (result.isBattleOver) {
-        handleBossBattleEnd("defeat", updatedPlayer, currentBoss);
-      } else {
-        // 6. 플레이어 턴으로 전환
-        addLog(`--- 플레이어의 턴 ---`, "normal");
-        const ticked = tickSkills(updatedPlayer); // 순수 로직
-        const {
-          player: playerAfterPet,
-          monster: monsterAfterPet,
-          logs: petLogs,
-        } = applyPetStartOfTurn(ticked, updatedBoss, getEffectivePlayerStats); // 순수 로직
-        addLogs(petLogs);
-        setPlayer(playerAfterPet);
-        setBoss(monsterAfterPet as BossStats);
-
-        if (monsterAfterPet && monsterAfterPet.hp <= 0) {
-          handleBossBattleEnd(
-            "victory",
-            playerAfterPet,
-            monsterAfterPet as BossStats
-          );
-          setIsProcessing(false);
-          return;
-        }
-        setIsPlayerTurn(true);
-        setIsProcessing(false);
-      }
-    }, 1500);
-  };
-
-  /**
-   * 보스 전투 종료 처리
-   */
-  const handleBossBattleEnd = (
-    type: "victory" | "defeat" | "escape",
-    updatedPlayer: PlayerStats,
-    targetBoss?: BossStats
-  ) => {
-    setConsecutiveMisses(0);
-    setRecoveryCharges(5);
-    let playerAfterBattle = { ...updatedPlayer };
-    const logs: Omit<LogMessage, "id">[] = [];
-    let didDropItem = false; // 아이템 드롭 여부 플래그
-
-    if (type === "victory" && targetBoss && currentBossDungeonId) {
-      logs.push({
-        msg: `🎉 보스 전투에서 승리했다! ${targetBoss.name}을(를) 물리쳤다.`,
-        type: "vic",
-      });
-      playerAfterBattle.vicCount += 1;
-
-      // 보스 보상 (일반 몬스터보다 훨씬 많음)
-      const gainedExp = getRandom(100, 300) + targetBoss.level * 200;
-      const gainedGold = getRandom(200, 500) + targetBoss.level * 100;
-
-      playerAfterBattle.exp += gainedExp;
-      playerAfterBattle.money += gainedGold;
-      logs.push({ msg: `👑 ${gainedExp} Exp를 획득했다.`, type: "gainExp" });
-      logs.push({
-        msg: `💰 ${gainedGold} Gold를 획득했다.`,
-        type: "gainMoney",
-      });
-
-      // 레벨업 체크 (보상 지급 후에)
-      const levelUpResult = checkLevelUp(playerAfterBattle); // 순수 로직
-      playerAfterBattle = levelUpResult.newPlayer;
-      logs.push(...levelUpResult.logs);
-
-      // 보스 드롭 로직
-      const DROP_CHANCE = 30; // 30% 확률
-      if (getRandom(1, 100) <= DROP_CHANCE && bossRewardPool.length > 0) {
-        didDropItem = true;
-        const rewardItem =
-          bossRewardPool[getRandom(0, bossRewardPool.length - 1)];
-
-        const ownedList =
-          rewardItem.type === "weapon"
-            ? playerAfterBattle.ownedWeaponIds || []
-            : playerAfterBattle.ownedArmorIds || [];
-        const isDuplicate = ownedList.includes(rewardItem.id);
-
-				// 직업 제한, 레벨 제한 로직
-        const isUsable =
-          (!rewardItem.allowedJobs || rewardItem.allowedJobs.includes(playerAfterBattle.job)) &&
-          (!rewardItem.requiredLevel || playerAfterBattle.level >= rewardItem.requiredLevel);
-
-        const sellPrice = Math.floor(rewardItem.price * 0.5); // 판매 시 정가 50%
-
-        setBossReward({ item: rewardItem, isDuplicate, isUsable, sellPrice });
-        setGameState("bossReward"); // 모달 상태로 전환
-        setShowBattleChoice(false); // 전투 후 선택지 숨김
-        logs.push({
-          msg: `🎁 [보스 드롭] ${rewardItem.name} 획득!`,
-          type: "lvup",
-        });
-      } else {
-        logs.push({
-          msg: `💨 아쉽지만, 특별한 아이템은 나오지 않았습니다...`,
-          type: "fail",
-        });
-      }
-
-      // 보스 던전 쿨타임 설정
-      const newCooldowns = {
-        ...bossCooldowns,
-        [currentBossDungeonId]: Date.now() + 60 * 60 * 1000, // 1시간
-      };
-      setBossCooldowns(newCooldowns);
-      localStorage.setItem("bossCooldowns", JSON.stringify(newCooldowns));
-    } else if (type === "defeat") {
-      logs.push({ msg: `☠️ 보스 전투에서 패배했다...`, type: "def" });
-      playerAfterBattle.defCount += 1;
-      playerAfterBattle.exp = Math.floor(playerAfterBattle.exp * 0.7);
-
-			// 패배 시 완전 회복 및 상태 초기화
-      playerAfterBattle.hp = playerAfterBattle.maxHp;
-			playerAfterBattle.activeBuffs = [];				// 버프 초기화
-			playerAfterBattle.skillCooldowns = {};		// 쿨타임 초기화
-			playerAfterBattle.isDefending = false;		// 방어 태세 해제
-
-      logs.push({
-        msg: `😥 잠시 쉬고 일어나 체력을 모두 회복했다.`,
-        type: "normal",
-      });
-    } else if (type === "escape") {
-      logs.push({ msg: `💨 보스 전투에서 도망쳤다...`, type: "fail" });
-    }
-
-    addLogs(logs);
-    setPlayer(playerAfterBattle);
-    setBoss(null);
-    setMonster(null);
-    setIsProcessing(false);
-    setIsPlayerTurn(true);
-
-    // 보스 던전 전투 종료 시 항상 홈(던전 화면)으로 복귀
-    if (type === "victory" && !didDropItem) {
-      // 승리 && 아이템 드롭 안됨 -> 홈으로 복귀
-      setShowBattleChoice(false);
-      setGameState("dungeon");
-      setCurrentBossDungeonId(null);
-
-			// 승리해서 돌아올 때도 상태 초기화 (쿨타임, 버프 제거)
-      setPlayer({
-        ...playerAfterBattle, // 이미 보상/레벨업이 반영된 플레이어 상태
-        activeBuffs: [],      // 버프 제거
-        skillCooldowns: {},   // 쿨타임 제거
-        isDefending: false,
-      });
-
-    } else if (type !== "victory") {
-      // 패배 || 도망 -> 홈으로 복귀
-      setShowBattleChoice(false);
-      setGameState("dungeon");
-      setCurrentBossDungeonId(null);
-    }
-    // (승리 && 아이템 드롭 시: GameState는 'bossReward'가 됨, handleBossRewardAction에서 처리)
-  };
-
-  /**
-   * 전투 종료 처리 (일반)
-   */
-  const handleBattleEnd = (
-    type: "victory" | "defeat" | "escape",
-    updatedPlayer: PlayerStats,
-    targetMonster?: CharacterStats
-  ) => {
-    // 허수아비 전투인 경우 특별 처리
-    if (isScarecrowBattle && targetMonster) {
-      if (type === "victory") {
-        addLog(`🎯 허수아비를 물리쳤습니다!`, "vic");
-        // 허수아비 HP 회복
-        const restoredScarecrow: CharacterStats = {
-          ...targetMonster,
-          hp: scarecrowConfig?.maxHp || targetMonster.maxHp,
-        };
-        setMonster(restoredScarecrow);
-        // 플레이어 턴으로 전환
-        addLog(`--- 플레이어의 턴 ---`, "normal");
-        const ticked = tickSkills(updatedPlayer);
-        const {
-          player: playerAfterPet,
-          monster: monsterAfterPet,
-          logs: petLogs,
-        } = applyPetStartOfTurn(
-          ticked,
-          restoredScarecrow,
-          getEffectivePlayerStats
-        );
-        addLogs(petLogs);
-        setPlayer(playerAfterPet);
-        setMonster(monsterAfterPet);
-        setIsPlayerTurn(true);
-        setIsProcessing(false);
-        return;
-      } else if (type === "defeat") {
-        addLog(`😊 허수아비에게 패배했습니다. 체력이 회복됩니다.`, "normal");
-        const recoveredPlayer = { ...updatedPlayer, hp: updatedPlayer.maxHp };
-        setPlayer(recoveredPlayer);
-        // 허수아비 HP 회복
-        const restoredScarecrow: CharacterStats = {
-          ...targetMonster,
-          hp: scarecrowConfig?.maxHp || targetMonster.maxHp,
-        };
-        setMonster(restoredScarecrow);
-        setIsPlayerTurn(true);
-        setIsProcessing(false);
-        return;
-      }
-    }
-
-    setConsecutiveMisses(0);
-    setRecoveryCharges(5);
-    let playerAfterBattle = { ...updatedPlayer };
-    const logs: Omit<LogMessage, "id">[] = [];
-		let didDropItem = false;
-
-    if (type === "victory" && targetMonster) {
-      logs.push({
-        msg: `🎉 전투에서 승리했다! ${targetMonster.name}을(를) 물리쳤다.`,
-        type: "vic",
-      });
-      playerAfterBattle.vicCount += 1;
-
-			// 일반 몬스터 아이템 드롭
-			const DROP_CHANCE = 5; 
-
-			// 승리 시 세션 킬 카운트 추가(state 업데이트)
-			setDungeonSessionKills((prev) => prev + 1);
-      
-      if (getRandom(1, 100) <= DROP_CHANCE && normalDropPool.length > 0) {
-        didDropItem = true;
-        const rewardItem = normalDropPool[getRandom(0, normalDropPool.length - 1)];
-
-        const ownedList = rewardItem.type === "weapon"
-            ? playerAfterBattle.ownedWeaponIds || []
-            : playerAfterBattle.ownedArmorIds || [];
-        const isDuplicate = ownedList.includes(rewardItem.id);
-
-        const isUsable = 
-					(!rewardItem.allowedJobs || rewardItem.allowedJobs.includes(playerAfterBattle.job)) &&
-          (!rewardItem.requiredLevel || playerAfterBattle.level >= rewardItem.requiredLevel);
-
-        const sellPrice = Math.floor(rewardItem.price * 0.5);
-
-        // 데이터는 bossReward 상태를 재사용하지만,
-        setBossReward({ item: rewardItem, isDuplicate, isUsable, sellPrice });
-        
-        // 🚨 상태는 'normalDrop'으로 설정하여 다른 모달을 띄웁니다!
-        setGameState("normalDrop"); 
-        
-        setShowBattleChoice(false);
-        
-        logs.push({
-          msg: `🎁 몬스터가 [${rewardItem.name}]을(를) 떨어뜨렸습니다!`,
-          type: "lvup",
-        });
-      }
-
-      // 처치 횟수 갱신
-      if (currentDungeonId) {
-        const newCount = (dungeonKillCounts[currentDungeonId] || 0) + 1;
-        setDungeonKillCounts((prev) => ({
-          ...prev,
-          [currentDungeonId!]: newCount,
-        }));
-        localStorage.setItem(
-          "dungeonKillCounts",
-          JSON.stringify({ ...dungeonKillCounts, [currentDungeonId]: newCount })
-        );
-      }
-
-      const gainedExp = getRandom(5, 30) + targetMonster.level * 60;
-      const gainedGold = getRandom(10, 50) + targetMonster.level * 30;
-
-      playerAfterBattle.exp += gainedExp;
-      playerAfterBattle.money += gainedGold;
-      logs.push({ msg: `👑 ${gainedExp} Exp를 획득했다.`, type: "gainExp" });
-      logs.push({
-        msg: `💰 ${gainedGold} Gold를 획득했다.`,
-        type: "gainMoney",
-      });
-
-      const levelUpResult = checkLevelUp(playerAfterBattle); // 순수 로직
-      playerAfterBattle = levelUpResult.newPlayer;
-      logs.push(...levelUpResult.logs);
-    } else if (type === "defeat") {
-      logs.push({ msg: `☠️ 전투에서 패배했다...`, type: "def" });
-      playerAfterBattle.defCount += 1;
-      playerAfterBattle.exp = Math.floor(playerAfterBattle.exp * 0.7);
-
-			// 패배 시 완전 회복 및 상태 초기화
-      playerAfterBattle.hp = playerAfterBattle.maxHp;
-			playerAfterBattle.activeBuffs = [];     // 버프 초기화
-      playerAfterBattle.skillCooldowns = {};  // 쿨타임 초기화
-      playerAfterBattle.isDefending = false;  // 방어 태세 해제
-
-      logs.push({
-        msg: `😥 잠시 쉬고 일어나 체력을 모두 회복했다.`,
-        type: "normal",
-      });
-    } else if (type === "escape") {
-      logs.push({ msg: `💨 전투에서 도망쳤다...`, type: "fail" });
-    }
-    addLogs(logs);
-    setPlayer(playerAfterBattle);
-    setMonster(null);
-    setBoss(null);
-    setIsProcessing(false);
-    setIsPlayerTurn(true);
-
-    // 승리 시 10회마다 선택지 표시, 그 외엔 자동 진행, 패배/도망 시에는 던전으로 복귀
-    if (type === "victory") {
-			// 아이템이 드롭되지 않았을 때만 '계속 싸우기' 버튼을 보여줌.
-			if (!didDropItem) {
-				// 현재 카운트 + 1이 10의 배수인지 확인
-				if ((dungeonSessionKills + 1) % 10 === 0) {
-					setShowBattleChoice(true);
-					addLog(`🛑 10회 사냥 달성! 정비를 위해 잠시 멈춥니다.`, "normal");
-				} else {
-					// 10회가 아니면 자동 진행
-          addLog(`⏩ 계속 나아가는 중... (${dungeonSessionKills + 1}/10)`, "normal");
-
-					// 약간의 딜레이 후 다음 던전 실행 (로그 읽을 시간 확보)
-          setTimeout(() => {
-            handleNextDungeon(); 
-          }, 800);
-				}
-			}
-			// 아이템이 드롭되었다면 모달이 떠 있으므로 버튼을 숨김
-    } else {
-			// 패배하거나 도망친 경우 -> 던전 선택 화면으로
-      setGameState("dungeon");
-      setCurrentDungeonId(null);
-    }
-  };
-
-  const handleContinueBattle = () => {
-    setShowBattleChoice(false);
-    handleNextDungeon(); // 현재 던전 ID (currentDungeonId) 기준으로 다음 몬스터
-  };
-
-  const handleExitDungeon = () => {
-		// 플레이어 정보가 없으면 중단
-		if (!player) return;
-
-    setShowBattleChoice(false);
-    setGameState("dungeon"); // 던전 선택 화면으로
-    setCurrentDungeonId(null);
-    setCurrentBossDungeonId(null);
-
-		// 퇴장 시 카운트 초기화
-		setDungeonSessionKills(0);
-
-		// 던전 사냥 종료 시 상태 초기화
-		setPlayer({
-			...player,
-			activeBuffs: [],			// 버프/디버프 모두 제거
-			skillCooldowns: {},		// 스킬 쿨타임 초기화
-			isDefending: false,		// 방어 태세 초기화
-		});
-
-    addLog("던전에서 퇴장합니다.", "normal");
-  };
+  // runMonsterTurn → useMonsterEngine으로 이동
+
+  // runBossTurn → useMonsterEngine으로 이동
+  // handleBossBattleEnd → useMonsterEngine으로 이동
+  // handleBattleEnd → useMonsterEngine으로 이동
+  // handleSelectBossDungeon → useMonsterEngine으로 이동
+  // handleNextDungeon → useMonsterEngine으로 이동
 
   // 게임 시작
   const gameStart = (name: string, job: Job) => {
-    const newPlayer = createNewPlayer(name, job); // 순수 로직
+    const newPlayer = createNewPlayer(name, job);
     setPlayer(newPlayer);
     setGameState("dungeon");
     addLog(`🥾 ${newPlayer.name} (${newPlayer.job}) (이)가 모험을 시작했다...`);
   };
 
-  // 던전 선택 및 액션
+  // 던전 선택
   const handleSelectDungeon = (dungeonId: string) => {
     const dungeon = dungeons.find((d) => d.id === dungeonId);
     if (!player || !dungeon) return;
@@ -1415,41 +519,9 @@ export const useGameEngine = () => {
     }
     setCurrentDungeonId(dungeonId);
     setGameState("dungeon");
-
-		// 입장 시 사냥 카운트 초기화
-		setDungeonSessionKills(0);
-
+    setDungeonSessionKills(0);
     addLog(`--- ${dungeon.icon} ${dungeon.name} ---`, "normal");
     handleNextDungeon(dungeon);
-  };
-
-  const handleSelectBossDungeon = (bossDungeonId: string) => {
-    const bossDungeon = bossDungeons.find((b) => b.id === bossDungeonId);
-    if (!player || !bossDungeon) return;
-    const cooldown = bossCooldowns[bossDungeonId] || 0;
-    if (cooldown > Date.now()) {
-      addLog(`🚫 쿨타임이 남아 입장할 수 없습니다.`, "fail");
-      return;
-    }
-    if (player.level < bossDungeon.requiredLevel) {
-      addLog(
-        `🚫 레벨이 부족하여 입장할 수 없습니다. (필요 레벨: ${bossDungeon.requiredLevel})`,
-        "fail"
-      );
-      return;
-    }
-    setCurrentBossDungeonId(bossDungeonId);
-    setGameState("battle");
-    addLog(`--- ${bossDungeon.icon} 보스 [${bossDungeon.name}] ---`, "appear");
-
-    const newBoss = createBoss(bossDungeon.bossLevel); // 순수 로직 (constants.ts에서)
-    setBoss(newBoss);
-    setMonster(null); // 일반 몬스터 제거
-
-    // 선공 판정
-    setIsPlayerTurn(false); // 보스 선공
-    addLog(`보스의 기운에 압도당했습니다. 보스가 먼저 행동합니다.`, "fail");
-    runBossTurn(player, newBoss);
   };
 
   const handleOpenDungeonSelect = () => setGameState("dungeonSelect");
@@ -1457,57 +529,25 @@ export const useGameEngine = () => {
   const handleOpenBossSelect = () => setGameState("bossSelect");
   const handleCloseBossSelect = () => setGameState("dungeon");
 
-  const handleNextDungeon = (selectedDungeon?: Dungeon) => {
-    if (isProcessing || !player) return;
+  const handleContinueBattle = () => {
+    setShowBattleChoice(false);
+    handleNextDungeon();
+  };
 
-    const dungeon =
-      selectedDungeon || dungeons.find((d) => d.id === currentDungeonId); // ⚠️ 누락된 변수 정의
-    if (!dungeon) {
-      addLog("🚫 입장할 던전을 찾을 수 없습니다.", "fail");
-      setGameState("dungeonSelect");
-      return;
-    }
-
-    addLog("🧭 던전 안을 향해 들어가본다...");
-    setIsProcessing(true);
-    setGameState("battle"); // 전투 상태로 변경
-    setShowBattleChoice(false); // 선택지 숨김
-
-    const killCount = dungeonKillCounts[dungeon.id] || 0; // ⚠️ 누락된 변수 정의
-    const shouldSpawnNamedMonster = killCount > 0 && killCount % 5 === 0; // ⚠️ 누락된 변수 정의
-
-    setTimeout(() => {
-      let newMonster: CharacterStats;
-      if (shouldSpawnNamedMonster) {
-        const baseMonster = makeMonster(dungeon.monsterLevelOffset); // 순수 로직
-
-        newMonster = {
-          ...baseMonster,
-          name: `[네임드] ${baseMonster.name}`,
-          hp: Math.floor(baseMonster.hp * 1.5),
-          maxHp: Math.floor(baseMonster.hp * 1.5),
-          atk: Math.floor(baseMonster.atk * 1.2),
-          def: Math.floor(baseMonster.def * 1.2),
-        };
-        addLog(`✨ [${newMonster.name}] (이)가 나타났다!`, "appear");
-      } else {
-        newMonster = makeMonster(dungeon.monsterLevelOffset); // 순수 로직
-        addLog(`👻 ${newMonster.name} (이)가 나타났다!`, "appear");
-      }
-      setMonster(newMonster);
-      setBoss(null); // 보스 제거
-
-      // 선공 판정
-      if (getRandom(1, 100) <= 50) {
-        addLog(`😁 선빵필승! 먼저 공격합니다.`, "normal");
-        setIsPlayerTurn(true);
-        setIsProcessing(false);
-      } else {
-        addLog(`😰 칫! 기습인가? 몬스터가 먼저 공격합니다.`, "fail");
-        setIsPlayerTurn(false);
-        runMonsterTurn(player, newMonster);
-      }
-    }, 1000);
+  const handleExitDungeon = () => {
+    if (!player) return;
+    setShowBattleChoice(false);
+    setGameState("dungeon");
+    setCurrentDungeonId(null);
+    setCurrentBossDungeonId(null);
+    setDungeonSessionKills(0);
+    setPlayer({
+      ...player,
+      activeBuffs: [],
+      skillCooldowns: {},
+      isDefending: false,
+    });
+    addLog("던전에서 퇴장합니다.", "normal");
   };
 
   const handleDungeonRecovery = () => {
@@ -2393,6 +1433,7 @@ export const useGameEngine = () => {
     bossReward,
     isDeveloperMode,
     isScarecrowBattle,
+    dungeonSessionKills,
 		isBattleSkillOpen,
     actions: {
       gameStart,
