@@ -395,7 +395,6 @@ function App() {
       {/* 허수아비 설정 화면 */}
       {gameState === "scarecrow" && (
         <ScarecrowScreen
-          player={player}
           onClose={actions.handleCloseScarecrow}
           onStartBattle={actions.handleStartScarecrowBattle}
         />

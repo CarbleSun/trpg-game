@@ -14,18 +14,14 @@ const __dirname = path.dirname(__filename)
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL
 
-// 저장 파일 디렉토리 경로
 const getSavesDirectory = () => {
   if (isDev) {
-    // 개발 모드: 프로젝트 루트의 saves 폴더
     return path.join(__dirname, '..', '..', 'saves')
   } else {
-    // 프로덕션 모드: 앱 데이터 폴더
     return path.join(app.getPath('userData'), 'saves')
   }
 }
 
-// 저장 디렉토리 생성
 const ensureSavesDirectory = async () => {
   const savesDir = getSavesDirectory()
   try {
@@ -36,7 +32,6 @@ const ensureSavesDirectory = async () => {
   return savesDir
 }
 
-// IPC 핸들러 등록
 ipcMain.handle('save-game-state', async (event, slot, gameState) => {
   try {
     const savesDir = await ensureSavesDirectory()
@@ -121,6 +116,16 @@ function createMainWindow() {
     mainWindow.show()
   })
 
+  // ✅ 함수 안으로 이동 + 개발/프로덕션 분기 처리
+  mainWindow.webContents.on('did-finish-load', () => {
+    const resourcesPath = isDev
+      ? path.join(__dirname, '..', '..', 'public').replace(/\\/g, '/')
+      : process.resourcesPath.replace(/\\/g, '/')
+    mainWindow.webContents.executeJavaScript(`
+      window.__RESOURCES_PATH__ = '${resourcesPath}';
+    `)
+  })
+
   if (isDev) {
     const devUrl = process.env.VITE_DEV_SERVER_URL
     mainWindow.loadURL(devUrl)
@@ -132,6 +137,8 @@ function createMainWindow() {
 
   return mainWindow
 }
+
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 app.whenReady().then(() => {
   createMainWindow()

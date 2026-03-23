@@ -49,6 +49,12 @@
       "electron/**/*",
       "package.json"
     ],
+		"extraResources": [
+			{
+				"from": "public/music",
+				"to": "music"
+			}
+    ],
     "directories": {
       "buildResources": "build"
     },

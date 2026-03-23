@@ -1,17 +1,8 @@
 import { useState } from 'react';
-import type { PlayerStats } from '../game/types';
 
 interface ScarecrowScreenProps {
-  player: PlayerStats;
   onClose: () => void;
   onStartBattle: (config: { atk: number; def: number; luk: number }) => void;
-}
-
-interface DamageRecord {
-  id: number;
-  type: 'dealt' | 'received';
-  damage: number;
-  timestamp: number;
 }
 
 interface ScarecrowStats {
@@ -20,7 +11,7 @@ interface ScarecrowStats {
   luk: number;
 }
 
-const ScarecrowScreen = ({ player, onClose, onStartBattle }: ScarecrowScreenProps) => {
+const ScarecrowScreen = ({ onClose, onStartBattle }: ScarecrowScreenProps) => {
   const [scarecrowStats, setScarecrowStats] = useState<ScarecrowStats>({
     atk: 50,
     def: 30,
@@ -154,4 +145,3 @@ const ScarecrowScreen = ({ player, onClose, onStartBattle }: ScarecrowScreenProp
 };
 
 export default ScarecrowScreen;
-

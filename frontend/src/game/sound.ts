@@ -4,7 +4,7 @@ let sharedReverbBuffer: AudioBuffer | null = null;
 
 // 🌟 배경음악(BGM) 인스턴스 관리용 변수
 let titleMusic: HTMLAudioElement | null = null;
-let creationMusic: HTMLAudioElement | null = null; // 🌟 캐릭터 생성 BGM 추가
+let creationMusic: HTMLAudioElement | null = null;
 
 const getAudioContext = () => {
   if (!audioCtx) {
@@ -14,10 +14,17 @@ const getAudioContext = () => {
   return audioCtx;
 };
 
+const getMusicPath = (filename: string): string => {
+  if ((window as any).__RESOURCES_PATH__) {
+    return `file://${(window as any).__RESOURCES_PATH__}/music/${filename}`;
+  }
+  return `/music/${filename}`;
+};
+
 // --- 타이틀 배경음악 ---
 export const playTitleMusic = () => {
   if (!titleMusic) {
-    titleMusic = new Audio('/music/Celestial_Overture.mp3'); 
+    titleMusic = new Audio(getMusicPath('Celestial_Overture.mp3')); // ✅ getMusicPath 사용
     titleMusic.loop = true;
     titleMusic.volume = 0.4;
   }
@@ -28,13 +35,14 @@ export const stopTitleMusic = () => {
   if (titleMusic) {
     titleMusic.pause();
     titleMusic.currentTime = 0;
+		titleMusic = null;
   }
 };
 
-// --- 🌟 캐릭터 생성 배경음악 추가 ---
+// --- 🌟 캐릭터 생성 배경음악 ---
 export const playCreationMusic = () => {
   if (!creationMusic) {
-    creationMusic = new Audio('/music/Character_Create.mp3'); 
+    creationMusic = new Audio(getMusicPath('Character_Create.mp3')); // ✅ getMusicPath 사용
     creationMusic.loop = true;
     creationMusic.volume = 0.4;
   }
@@ -45,6 +53,7 @@ export const stopCreationMusic = () => {
   if (creationMusic) {
     creationMusic.pause();
     creationMusic.currentTime = 0;
+		creationMusic = null;
   }
 };
 
@@ -52,7 +61,7 @@ export const stopCreationMusic = () => {
 const getReverbBuffer = (ctx: AudioContext) => {
   if (sharedReverbBuffer) return sharedReverbBuffer;
   const rate = ctx.sampleRate;
-  const length = rate * 2.5; 
+  const length = rate * 2.5;
   const impulse = ctx.createBuffer(2, length, rate);
   for (let i = 0; i < 2; i++) {
     const channel = impulse.getChannelData(i);
@@ -91,7 +100,7 @@ export const playClickSound = () => {
     dryGain.connect(masterGain);
 
     const wetGain = ctx.createGain();
-    wetGain.gain.value = 0.5; 
+    wetGain.gain.value = 0.5;
     wetGain.connect(convolver);
 
     const inputNode = ctx.createGain();
@@ -106,8 +115,8 @@ export const playClickSound = () => {
 
     const noiseGain = ctx.createGain();
     noiseGain.gain.setValueAtTime(0, time);
-    noiseGain.gain.linearRampToValueAtTime(0.5, time + 0.01); 
-    noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.1); 
+    noiseGain.gain.linearRampToValueAtTime(0.5, time + 0.01);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
 
     noiseSrc.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
@@ -143,7 +152,7 @@ export const playHoverSound = () => {
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(400, time); 
+    filter.frequency.setValueAtTime(400, time);
     filter.Q.value = 1;
 
     const gain = ctx.createGain();
@@ -153,7 +162,7 @@ export const playHoverSound = () => {
 
     noiseSource.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination); 
+    gain.connect(ctx.destination);
     noiseSource.start(time);
   } catch (e) {}
 };
@@ -205,12 +214,13 @@ export const playStartSound = () => {
     };
     createMetallicImpact(time, 800, 4.0);
     createMetallicImpact(time + 0.25, 500, 5.0);
+
     const dragDuration = 2.5;
     const dragSource = ctx.createBufferSource();
     dragSource.buffer = createNoiseBuffer(ctx, dragDuration);
 
     const dragFilter = ctx.createBiquadFilter();
-    dragFilter.type = 'bandpass'; 
+    dragFilter.type = 'bandpass';
     dragFilter.frequency.setValueAtTime(200, time + 0.4);
     dragFilter.frequency.linearRampToValueAtTime(50, time + dragDuration);
     dragFilter.Q.value = 0.5;
@@ -267,7 +277,7 @@ export const playEnterWorldSound = () => {
     const time = ctx.currentTime;
 
     const masterGain = ctx.createGain();
-    masterGain.gain.value = 5.0; 
+    masterGain.gain.value = 5.0;
     masterGain.connect(ctx.destination);
 
     const convolver = ctx.createConvolver();
@@ -288,7 +298,7 @@ export const playEnterWorldSound = () => {
 
     const createMetallicClick = (t: number, pitch: number, vol: number) => {
       const src = ctx.createBufferSource();
-      src.buffer = createNoiseBuffer(ctx, 0.1); 
+      src.buffer = createNoiseBuffer(ctx, 0.1);
 
       const filter = ctx.createBiquadFilter();
       filter.type = 'bandpass';
@@ -298,21 +308,23 @@ export const playEnterWorldSound = () => {
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0, t);
       gain.gain.linearRampToValueAtTime(vol, t + 0.005);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08); 
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
 
       src.connect(filter);
       filter.connect(gain);
       gain.connect(inputNode);
       src.start(t);
     };
-    const gearStartTime = time; 
-    const gearCount = 25; 
-    const gearInterval = 0.035; 
+
+    const gearStartTime = time;
+    const gearCount = 25;
+    const gearInterval = 0.035;
     for (let i = 0; i < gearCount; i++) {
       const t = gearStartTime + (i * gearInterval);
-      const pitch = 400 + (Math.random() * 150); 
+      const pitch = 400 + (Math.random() * 150);
       createMetallicClick(t, pitch, 5.0);
     }
+
     const rumbleOsc = ctx.createOscillator();
     const rumbleGain = ctx.createGain();
     rumbleOsc.type = 'triangle';
@@ -321,7 +333,7 @@ export const playEnterWorldSound = () => {
     rumbleGain.gain.linearRampToValueAtTime(2.0, gearStartTime + 0.1);
     rumbleGain.gain.linearRampToValueAtTime(2.0, gearStartTime + (gearCount * gearInterval) - 0.1);
     rumbleGain.gain.exponentialRampToValueAtTime(0.001, gearStartTime + (gearCount * gearInterval) + 0.2);
-		
+
     rumbleOsc.connect(rumbleGain);
     rumbleGain.connect(inputNode);
     rumbleOsc.start(gearStartTime);
