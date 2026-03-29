@@ -582,8 +582,8 @@ export const useGameEngine = () => {
 
     const isBonusAttack = consecutiveMisses >= 3;
 
-    // 차지/트루 스트라이크 버프 처리
-    let chargedStats = { ...effectivePlayer };
+    // 트루 스트라이크 버프 처리 (차지 공격력 배율은 getEffectivePlayerStats에 포함됨)
+    const attackerStats = { ...effectivePlayer };
     let logs: Omit<LogMessage, "id">[] = [];
 
     const chargeIdx = (player.activeBuffs || []).findIndex(
@@ -591,9 +591,6 @@ export const useGameEngine = () => {
     );
     if (chargeIdx >= 0) {
       const buff = player.activeBuffs![chargeIdx];
-      chargedStats.atk = Math.floor(
-        chargedStats.atk * (1 + buff.chargeAttackMultiplier!)
-      );
       logs.push({
         msg: `🔥 [${buff.key}] 스킬 효과! 공격력 증폭!`,
         type: "vic",
@@ -639,7 +636,7 @@ export const useGameEngine = () => {
       }
     }
 
-    let result = calculateAttack(chargedStats, defenderStats, isBonusAttack); // 순수 로직
+    let result = calculateAttack(attackerStats, defenderStats, isBonusAttack); // 순수 로직
     addLogs(result.logs);
 
     const updatedDefender = result.defender;

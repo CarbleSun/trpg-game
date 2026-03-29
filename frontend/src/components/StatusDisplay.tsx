@@ -86,11 +86,33 @@ const StatusDisplay = ({
         <div className="grid grid-cols-2 gap-3 pb-1 relative z-10 shrink-0">
           <div className="flex flex-col bg-slate-800/40 rounded-lg p-2.5 border border-slate-600/30 shadow-inner backdrop-blur-sm transition-colors hover:bg-slate-800/60">
             <span className="text-[10px] text-orange-400/90 font-bold tracking-widest mb-1 uppercase">Attack</span>
-            <span className="font-bold text-[15px] text-slate-100 font-mono tracking-tight">{totalAtk}</span>
+            <span className="font-bold text-[15px] text-slate-100 font-mono tracking-tight leading-tight">{totalAtk}</span>
+            {buffAtk !== 0 && (
+              <span
+                className={`mt-1 text-[10px] font-bold rounded-full px-1.5 py-0.5 w-fit border ${
+                  buffAtk > 0
+                    ? 'text-orange-200 bg-orange-500/25 border-orange-400/35'
+                    : 'text-rose-200 bg-rose-500/20 border-rose-400/30'
+                }`}
+              >
+                {buffAtk > 0 ? `+${buffAtk}` : buffAtk}
+              </span>
+            )}
           </div>
           <div className="flex flex-col bg-slate-800/40 rounded-lg p-2.5 border border-slate-600/30 shadow-inner backdrop-blur-sm transition-colors hover:bg-slate-800/60">
             <span className="text-[10px] text-blue-400/90 font-bold tracking-widest mb-1 uppercase">Defend</span>
-            <span className="font-bold text-[15px] text-slate-100 font-mono tracking-tight">{totalDef}</span>
+            <span className="font-bold text-[15px] text-slate-100 font-mono tracking-tight leading-tight">{totalDef}</span>
+            {buffDef !== 0 && (
+              <span
+                className={`mt-1 text-[10px] font-bold rounded-full px-1.5 py-0.5 w-fit border ${
+                  buffDef > 0
+                    ? 'text-red-200 bg-red-500/20 border-red-400/30'
+                    : 'text-sky-200 bg-sky-500/20 border-sky-400/30'
+                }`}
+              >
+                {buffDef > 0 ? `-${buffDef}` : `+${Math.abs(buffDef)}`}
+              </span>
+            )}
           </div>
         </div>
 

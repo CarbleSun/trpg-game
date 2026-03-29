@@ -120,6 +120,12 @@ export const getEffectivePlayerStats = (p: PlayerStats): CharacterStats => {
     });
   }
 
+	// 차지/트레이드오프 공격력 배율 (handleAttack과 동일하게 첫 번째 해당 버프만)
+	const chargeBuff = (p.activeBuffs || []).find((b) => (b.chargeAttackMultiplier ?? 0) > 0);
+	if (chargeBuff?.chargeAttackMultiplier != null) {
+		finalAtk = Math.floor(finalAtk * (1 + chargeBuff.chargeAttackMultiplier));
+	}
+
 	// 음수 방지
 	finalDef = Math.max(0, finalDef);
 
