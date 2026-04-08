@@ -14,15 +14,9 @@
     "lint": "eslint .",
     "preview": "vite preview"
   },
-  "dependencies": {
-    "@tailwindcss/vite": "^4.1.15",
-    "lucide-react": "^0.546.0",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "tailwindcss": "^4.1.15"
-  },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
+    "@tailwindcss/vite": "^4.1.15",
     "@types/node": "^24.6.0",
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
@@ -36,6 +30,10 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.22",
     "globals": "^16.4.0",
+    "lucide-react": "^0.546.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tailwindcss": "^4.1.15",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.45.0",
     "vite": "^7.1.7",
@@ -44,16 +42,21 @@
   "build": {
     "appId": "com.trpggame.desktop",
     "productName": "TRPG Game",
+    "electronLanguages": [
+      "ko",
+      "en-US"
+    ],
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "package.json"
+      "package.json",
+      "!**/*.map"
     ],
-		"extraResources": [
-			{
-				"from": "public/music",
-				"to": "music"
-			}
+    "extraResources": [
+      {
+        "from": "public/music",
+        "to": "music"
+      }
     ],
     "directories": {
       "buildResources": "build"
